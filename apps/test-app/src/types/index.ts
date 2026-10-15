@@ -1,1 +1,1 @@
-export type { ReportMetric } from './report-types.js';
+export type { ReportMetric } from '@difftrail/example-shared/report-types';

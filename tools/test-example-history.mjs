@@ -83,6 +83,7 @@ function expectResult(cwd, files, removed = [], args = ['--json']) {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, '');
   const output = JSON.parse(result.stdout);
+  assert.equal(output.root, runGit(cwd, ['rev-parse', '--show-toplevel']));
   assert.deepEqual(output.files, files);
   assert.deepEqual(output.removed, removed);
 }
@@ -135,18 +136,23 @@ try {
         'apps/test-app/src/utils/dashboard-summary.ts',
         "export const dashboardSummary = { files: '09' };\n",
       ),
-    (cwd) =>
+    (cwd) => {
+      const paths = [
+        'apps/test-app/src/App.vue',
+        'apps/test-app/src/main.ts',
+        'apps/test-app/src/pages/DashboardPage.vue',
+        'apps/test-app/src/utils/dashboard-summary.ts',
+      ].sort();
+      const base = runGit(cwd, ['rev-parse', 'HEAD^']);
+      const head = runGit(cwd, ['rev-parse', 'HEAD']);
+      expectResult(cwd, paths);
       expectResult(
-        cwd,
-        [
-          'apps/test-app/src/App.vue',
-          'apps/test-app/src/main.ts',
-          'apps/test-app/src/pages/DashboardPage.vue',
-          'apps/test-app/src/utils/dashboard-summary.ts',
-        ].sort(),
+        join(cwd, 'apps/test-app'),
+        paths,
         [],
-        ['--json'],
-      ),
+        ['--base', base, '--head', head, '--json'],
+      );
+    },
   );
 
   scenario(
@@ -162,7 +168,7 @@ try {
       ),
     (cwd) =>
       expectResult(
-        cwd,
+        join(cwd, 'apps/test-app'),
         [
           'apps/test-app/src/App.vue',
           'apps/test-app/src/assets/dashboard.svg',
@@ -178,9 +184,8 @@ try {
       const tsconfigPath = join(cwd, 'apps/test-app/tsconfig.json');
       const tsconfig = JSON.parse(readFileSync(tsconfigPath, 'utf8'));
       tsconfig.compilerOptions.paths['@models'] = [
-        './src/alternate-types/index.ts',
+        './../../packages/example-shared/src/report-types.ts',
       ];
-      tsconfig.compilerOptions.paths['@models/*'] = ['./src/alternate-types/*'];
       write(
         cwd,
         'apps/test-app/tsconfig.json',

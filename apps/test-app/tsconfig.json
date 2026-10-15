@@ -3,9 +3,7 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"],
-      "@shared/*": ["./../../packages/example-shared/src/*"],
-      "@models": ["./src/types/index.ts"],
-      "@models/*": ["./src/types/*"]
+      "@models": ["./src/types/index.ts"]
     },
     "allowJs": true,
     "checkJs": false,
