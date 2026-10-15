@@ -46,6 +46,12 @@ full gate was not redundantly rerun for the merge. The final review and manual
 QA jobs also did not rerun the broad gate. Mutation testing was not run and is
 not claimed as passing.
 
+After pushing integration head
+[`9d75e74`](https://github.com/Ked57/difftrail/commit/9d75e74a59c6b991472875dff33052cb60ae81f5),
+fresh Ubuntu push run [38782818828](https://github.com/Ked57/difftrail/actions/runs/38782818828)
+and pull-request run [38782824884](https://github.com/Ked57/difftrail/actions/runs/38782824884)
+both passed `pnpm verify:full`. The optional mutation job was skipped in both.
+
 ## Manual packed-package QA
 
 The first fresh npm consumer run used the earlier package pin
@@ -76,10 +82,9 @@ real-Git fixtures, and exact output, is
 ## Limits
 
 Executed manual evidence covers pnpm `10.34.7` on macOS arm64 with Node
-`22.23.1`; it does not establish support for other pnpm versions, peer-context
-variants, custom virtual-store layouts, npm nested layouts, or other operating
-systems. Linux, Windows, and Node 24 remain unverified for this repair until
-fresh CI results are observed. The fixture install used `--prefer-offline` and
+`22.23.1`; CI covers Ubuntu. It does not establish support for other pnpm
+versions, peer-context variants, custom virtual-store layouts, npm nested
+layouts, Windows, macOS CI, or Node 24. The fixture install used `--prefer-offline` and
 scripts disabled; Difftrail analysis itself performs no install, fetch, or
 project-script execution. No browser QA applies to this analyzer and CLI
 change. The package was packed and installed locally; no registry publication
