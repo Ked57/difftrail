@@ -38,12 +38,12 @@ stdout. The implementation rationale and regression seams are described in
 Reports are retained outside the repository. SHA-256 values identify their exact
 contents:
 
-| Evidence | Artifact | SHA-256 |
-| --- | --- | --- |
-| Standards reviews, including final host-boundary review | `/private/tmp/ancestor-provider-standards-review-luna.md` | `31c61c8aad770de8c858e814b07abb283e2cab8ae8824b776995b8baee328cff` |
-| Final specification review | `/private/tmp/ancestor-provider-spec-review-luna.md` | `e1f66b85677f8841e376716a6e8f22bab6febf40e693031f3fa1aab4d6fe01d1` |
-| Packed CLI manual QA, including original failure and successful retests | `/private/tmp/ancestor-provider-manual-qa-luna.md` | `d201f27a3cb56070320f778885b3fa36d19e32c6e3f6b8d46cf64cad1815e794` |
-| Config-host boundary diagnosis | `/private/tmp/config-host-diagnosis-luna.md` | `536675c85b106d5f9474ecac14bc33ddf25041cd08390c730e0e6eda36a81551` |
+| Evidence                                                                | Artifact                                                  | SHA-256                                                            |
+| ----------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------ |
+| Standards reviews, including final host-boundary review                 | `/private/tmp/ancestor-provider-standards-review-luna.md` | `31c61c8aad770de8c858e814b07abb283e2cab8ae8824b776995b8baee328cff` |
+| Final specification review                                              | `/private/tmp/ancestor-provider-spec-review-luna.md`      | `e1f66b85677f8841e376716a6e8f22bab6febf40e693031f3fa1aab4d6fe01d1` |
+| Packed CLI manual QA, including original failure and successful retests | `/private/tmp/ancestor-provider-manual-qa-luna.md`        | `d201f27a3cb56070320f778885b3fa36d19e32c6e3f6b8d46cf64cad1815e794` |
+| Config-host boundary diagnosis                                          | `/private/tmp/config-host-diagnosis-luna.md`              | `536675c85b106d5f9474ecac14bc33ddf25041cd08390c730e0e6eda36a81551` |
 
 ## Automated and packed CLI evidence
 
