@@ -16,6 +16,7 @@ import {
   prepareConfigProviderEvidence,
   type ConfigProviderReference,
 } from './external-config.js';
+import type { ValidatedConfigRoot } from './config.js';
 import { autoImportEdges } from './auto-imports.js';
 import { localReferenceEdges } from './local.js';
 import { analysisGap as gap } from './errors.js';
@@ -40,7 +41,7 @@ async function extractModules(
   snapshot: Snapshot,
   sources: readonly string[],
   requiredSpecifiers: ReadonlyMap<string, SourceInspection>,
-  configRootsBySource: ReadonlyMap<string, readonly string[]>,
+  configRootsBySource: ReadonlyMap<string, readonly ValidatedConfigRoot[]>,
 ): Promise<{
   modules: ResolvedModule[];
   configurationEdges: DependencyEdge[];
@@ -74,7 +75,7 @@ async function extractGroup(
   snapshot: Snapshot,
   group: ReturnType<typeof groupSourcesByConfig>[number],
   requiredSpecifiers: ReadonlyMap<string, SourceInspection>,
-  externalPackageRoots: readonly string[],
+  externalPackageRoots: readonly ValidatedConfigRoot[],
 ): Promise<{
   modules: ResolvedModule[];
   configurationEdges: DependencyEdge[];
@@ -221,7 +222,10 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
 interface ResolutionEvidence {
   readonly workspaces: Awaited<ReturnType<typeof prepareWorkspaces>>;
   readonly external: ExternalEvidence;
-  readonly configRootsBySource: ReadonlyMap<string, readonly string[]>;
+  readonly configRootsBySource: ReadonlyMap<
+    string,
+    readonly ValidatedConfigRoot[]
+  >;
   readonly configExtends: readonly ConfigProviderReference[];
 }
 
@@ -296,18 +300,29 @@ async function prepareInstalledEvidence(
 function configuredAliases(
   snapshot: Snapshot,
   sources: readonly string[],
-  configRootsBySource: ReadonlyMap<string, readonly string[]>,
+  configRootsBySource: ReadonlyMap<string, readonly ValidatedConfigRoot[]>,
 ): Map<string, readonly string[]> {
   const result = new Map<string, readonly string[]>();
   for (const group of groupSourcesByConfig(snapshot, sources)) {
     if (!group.configPath) continue;
-    const aliases = Object.keys(
-      parseSnapshotConfig(
+    let aliases: string[];
+    try {
+      aliases = Object.keys(
+        parseSnapshotConfig(
+          snapshot,
+          group.configPath,
+          configRootsForSources(group.sources, configRootsBySource),
+        ).parsed.options.paths ?? {},
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Analysis gap'))
+        throw error;
+      throw gap(
         snapshot,
-        group.configPath,
-        configRootsForSources(group.sources, configRootsBySource),
-      ).parsed.options.paths ?? {},
-    );
+        group.sources.join(', '),
+        `${group.configPath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     for (const source of group.sources) result.set(source, aliases);
   }
   return result;

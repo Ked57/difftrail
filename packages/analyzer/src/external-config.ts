@@ -1,7 +1,11 @@
 import type { DependencyEdge } from '@difftrail/core';
 import type { Snapshot } from '@difftrail/git';
 import { groupSourcesByConfig } from './contexts.js';
-import { externalConfigExtends, type ExternalConfigExtend } from './config.js';
+import {
+  externalConfigExtends,
+  type ExternalConfigExtend,
+  type ValidatedConfigRoot,
+} from './config.js';
 import { analysisGap as gap } from './errors.js';
 import {
   externalEvidenceFor,
@@ -17,7 +21,7 @@ export interface ConfigProviderReference extends ExternalConfigExtend {
 export interface ConfigProviderEvidence {
   readonly references: readonly ConfigProviderReference[];
   readonly specifiers: ReadonlyMap<string, readonly string[]>;
-  readonly rootsBySource: ReadonlyMap<string, readonly string[]>;
+  readonly rootsBySource: ReadonlyMap<string, readonly ValidatedConfigRoot[]>;
 }
 
 export async function prepareConfigProviderEvidence(
@@ -53,11 +57,13 @@ export async function prepareConfigProviderEvidence(
 
 export function configRootsForSources(
   sources: readonly string[],
-  rootsBySource: ReadonlyMap<string, readonly string[]>,
-): string[] {
-  return [
-    ...new Set(sources.flatMap((source) => rootsBySource.get(source) ?? [])),
-  ];
+  rootsBySource: ReadonlyMap<string, readonly ValidatedConfigRoot[]>,
+): ValidatedConfigRoot[] {
+  const roots = new Map<string, ValidatedConfigRoot>();
+  for (const source of sources)
+    for (const root of rootsBySource.get(source) ?? [])
+      roots.set(`${root.specifier}\0${root.packageRoot}`, root);
+  return [...roots.values()];
 }
 
 export function includeConfigSpecifiers(
@@ -112,8 +118,8 @@ function configSpecifiers(
 function packageRoots(
   references: readonly ConfigProviderReference[],
   evidence: ExternalEvidence,
-): Map<string, string[]> {
-  const result = new Map<string, Set<string>>();
+): Map<string, ValidatedConfigRoot[]> {
+  const result = new Map<string, Map<string, ValidatedConfigRoot>>();
   for (const reference of references) {
     const provider = externalEvidenceFor(
       evidence,
@@ -121,11 +127,17 @@ function packageRoots(
       reference.specifier,
     );
     if (!provider) continue;
-    const roots = result.get(reference.source) ?? new Set<string>();
-    roots.add(provider.packageRoot);
+    const roots =
+      result.get(reference.source) ?? new Map<string, ValidatedConfigRoot>();
+    roots.set(`${reference.specifier}\0${provider.packageRoot}`, {
+      packageRoot: provider.packageRoot,
+      specifier: reference.specifier,
+    });
     result.set(reference.source, roots);
   }
-  return new Map([...result].map(([source, roots]) => [source, [...roots]]));
+  return new Map(
+    [...result].map(([source, roots]) => [source, [...roots.values()]]),
+  );
 }
 
 function throwWithConfigContext(

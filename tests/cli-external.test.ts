@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import {
   lstat,
   mkdir,
+  mkdtemp,
   readFile,
   realpath,
   rm,
@@ -9,6 +10,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { repository } from './helpers.js';
 
@@ -156,6 +158,34 @@ function runCli(root: string) {
     encoding: 'utf8',
   });
 }
+
+test('rejects an absolute config include outside the snapshot with a gap', async () => {
+  const repo = await repository({
+    'package.json': JSON.stringify({ name: 'config-boundary-fixture' }),
+    'tsconfig.json': '{}',
+    'src/entry.ts':
+      "import {readFile} from 'node:fs'; export const value = readFile;",
+  });
+  const outside = await mkdtemp(
+    join(tmpdir(), 'difftrail-cli-config-outside-'),
+  );
+  try {
+    await writeFile(join(outside, 'host-only.ts'), 'export const host = true;');
+    const revision = await repo.commit({
+      'tsconfig.json': JSON.stringify({ include: [join(outside, '**/*.ts')] }),
+    });
+    const result = runCli(repo.root);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('src/entry.ts');
+    expect(result.stderr).toContain(revision);
+    expect(result.stderr).toContain('tsconfig.json');
+    expect(result.stderr).toContain('include');
+  } finally {
+    await rm(outside, { recursive: true, force: true });
+    await repo.cleanup();
+  }
+});
 
 async function rootProviderFixture() {
   return repository({

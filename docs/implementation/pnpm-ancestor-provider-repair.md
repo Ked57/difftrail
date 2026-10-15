@@ -34,7 +34,12 @@ package requests use the same ancestor provider validation. Config parsing may
 read files only beneath those validated installed package roots; other
 untracked files remain unavailable. The source receives metadata edges to the
 provider manifest and lock, and configuration edges to the tracked config files
-that compose the chain.
+that compose the chain. Directory enumeration is driven by tracked snapshot
+paths or the validated package roots. TypeScript may probe only the exact
+validated package aliases and their virtual parent directories; host
+`readDirectory`, `directoryExists`, and `realpath` calls cannot inspect other
+filesystem locations. An absolute or escaping config include fails with a
+source, config path, and revision gap instead of reading host files.
 
 ## Regression seams
 
@@ -59,6 +64,9 @@ A second CLI fixture performs a standard frozen pnpm install with root-only
 source imports only a builtin and a local file. It checks successful parsing,
 missing provider-link rejection, and wrong installed config-package identity,
 including source, tracked config, provider manifest, lock, and revision context.
+An additional built-CLI fixture points a committed include at an untracked
+absolute temporary directory and requires an actionable failure with zero
+stdout; a safe tracked include and inherited provider config remain successful.
 
 ## Limits
 
