@@ -102,8 +102,68 @@ try {
     await readFile('packages/cli/tests/parser-smoke.mjs'),
   );
   run(process.execPath, [parserSmoke, fixture], consumer);
+  const pnpmConsumer = join(temporary, 'pnpm-consumer');
+  await mkdir(pnpmConsumer);
+  await writeFile(
+    join(pnpmConsumer, 'package.json'),
+    JSON.stringify({
+      private: true,
+      packageManager: 'pnpm@10.34.7',
+      dependencies: { difftrail: `file:${join(temporary, archive)}` },
+    }),
+  );
+  run('pnpm', ['install', '--offline', '--ignore-scripts'], pnpmConsumer);
+  await writeFile(
+    join(fixture, 'base.json'),
+    JSON.stringify({
+      compilerOptions: { paths: { '@a/*': ['packages/a/src/current/*'] } },
+    }),
+  );
+  await mkdir(join(fixture, 'packages/a'), { recursive: true });
+  await writeFile(
+    join(fixture, 'packages/a/tsconfig.json'),
+    JSON.stringify({ extends: '../../base.json' }),
+  );
+  await mkdir(join(fixture, 'packages/a/src/current'), { recursive: true });
+  await mkdir(join(fixture, 'packages/a/src/alternate'), { recursive: true });
+  await writeFile(
+    join(fixture, 'packages/a/src/current/value.ts'),
+    'export const value = 1;',
+  );
+  await writeFile(
+    join(fixture, 'packages/a/src/alternate/value.ts'),
+    'export const value = 2;',
+  );
+  await writeFile(
+    join(fixture, 'packages/a/src/consumer.ts'),
+    "import {value} from '@a/value'; export const page = value;",
+  );
+  run('git', ['add', '--all'], fixture);
+  run('git', ['commit', '--quiet', '-m', 'add configured alias'], fixture);
+  await writeFile(
+    join(fixture, 'base.json'),
+    JSON.stringify({
+      compilerOptions: { paths: { '@a/*': ['packages/a/src/alternate/*'] } },
+    }),
+  );
+  run('git', ['commit', '--quiet', '-am', 'change alias target'], fixture);
+  const pnpmBin = join(
+    pnpmConsumer,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'difftrail.cmd' : 'difftrail',
+  );
+  assert.equal(
+    run(pnpmBin, [], fixture),
+    [
+      'base.json',
+      'packages/a/src/alternate/value.ts',
+      'packages/a/src/consumer.ts',
+      'packages/a/src/current/value.ts',
+    ].join('\n') + '\n',
+  );
   console.log(
-    'Isolated tarball install, executable, bundled modules, license, metadata and real shipped TypeScript parser passed.',
+    'Isolated npm and strict pnpm tarball installs, CLI, config-alias resolver, bundled modules, license, metadata and TypeScript parser passed.',
   );
 } finally {
   await rm(temporary, { recursive: true, force: true });

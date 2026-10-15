@@ -6,6 +6,7 @@ import { dirname, join, resolve, relative, isAbsolute, sep } from 'node:path';
 export interface Snapshot {
   readonly revision: string | null;
   readonly directory: string;
+  readonly repositoryRoot: string;
   readonly paths: readonly string[];
 }
 export interface Comparison {
@@ -51,7 +52,8 @@ async function materialize(
   directory: string,
 ): Promise<Snapshot> {
   await mkdir(directory);
-  if (revision === null) return { revision, directory, paths: [] };
+  if (revision === null)
+    return { revision, directory, repositoryRoot: root, paths: [] };
   const entries = (
     await git(root, ['ls-tree', '-r', '-z', '--full-tree', revision])
   )
@@ -75,7 +77,7 @@ async function materialize(
     await writeFile(destination, await git(root, ['cat-file', 'blob', oid]));
     paths.push(path);
   }
-  return { revision, directory, paths };
+  return { revision, directory, repositoryRoot: root, paths };
 }
 async function resolveCommit(
   root: string,
