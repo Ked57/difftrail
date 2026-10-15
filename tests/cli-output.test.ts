@@ -1,14 +1,23 @@
 import { expect, test } from 'vitest';
 import { realpath } from 'node:fs/promises';
+import { mkdirSync } from 'node:fs';
 import { repository } from './helpers.js';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const executable = resolve('packages/cli/dist/cli.js');
 function cli(cwd: string, ...args: string[]) {
+  const temporaryRoot = join(cwd, '.difftrail-test-tmp');
+  mkdirSync(temporaryRoot, { recursive: true });
   return spawnSync(process.execPath, [executable, ...args], {
     cwd,
     encoding: 'utf8',
+    env: {
+      ...process.env,
+      TMPDIR: temporaryRoot,
+      TMP: temporaryRoot,
+      TEMP: temporaryRoot,
+    },
   });
 }
 
@@ -61,6 +70,9 @@ test('built CLI emits exact NUL output and rejects incompatible options atomical
       expect(invalid.stdout).toBe('');
       expect(invalid.stderr).not.toBe('');
     }
+    const missingFilter = cli(repo.root, '--filter');
+    expect(missingFilter.status).toBe(2);
+    expect(missingFilter.stderr).toContain('filter pattern after --filter');
   } finally {
     await repo.cleanup();
   }
@@ -168,6 +180,35 @@ test('built CLI handles selected paths containing line breaks without partial ou
     expect(
       JSON.parse(cli(repo.root, '--json', '--filter', '**/line*').stdout).files,
     ).toEqual(['line\nbreak.md']);
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('recursive filters preserve paths through newline directory components', async () => {
+  const repo = await repository({ 'before.md': 'base' });
+  try {
+    const base = repo.git('rev-parse', 'HEAD');
+    const head = await repo.commit({ 'dir\nname/page.md': 'changed' });
+    const expectedJson =
+      JSON.stringify({
+        root: await realpath(repo.root),
+        base,
+        head,
+        scope: 'static',
+        files: ['dir\nname/page.md'],
+        removed: [],
+      }) + '\n';
+    expect(cli(repo.root, '--json', '--filter', '**/page.md')).toMatchObject({
+      status: 0,
+      stdout: expectedJson,
+      stderr: '',
+    });
+    expect(cli(repo.root, '--null', '--filter', '**/page.md')).toMatchObject({
+      status: 0,
+      stdout: 'dir\nname/page.md\0',
+      stderr: '',
+    });
   } finally {
     await repo.cleanup();
   }

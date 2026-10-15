@@ -8,14 +8,15 @@ function recordFlag(flags: Set<string>, flag: string): void {
   if (flags.has(flag)) throw new UsageError('Invalid or repeated CLI option.');
   flags.add(flag);
 }
-function readRevision(
+function readOptionValue(
   args: readonly string[],
   index: number,
-  flag: string,
+  option: string,
+  valueName: string,
 ): string {
   const value = args[index + 1];
   if (!value || value.startsWith('--'))
-    throw new UsageError(`Missing revision after ${flag}.`);
+    throw new UsageError(`Missing ${valueName} after ${option}.`);
   return value;
 }
 function globExpression(pattern: string): RegExp {
@@ -26,9 +27,9 @@ function globExpression(pattern: string): RegExp {
       if (pattern[index + 1] === '*') {
         index++;
         if (pattern[index + 1] === '/') {
-          expression += '(?:.*/)?';
+          expression += '(?:[\\s\\S]*/)?';
           index++;
-        } else expression += '.*';
+        } else expression += '[\\s\\S]*';
       } else expression += '[^/]*';
     } else if (character === '?') expression += '[^/]';
     else if (character !== undefined && /[\\^$+?.()|[\]{}]/.test(character))
@@ -57,11 +58,11 @@ function collectOptions(args: readonly string[]): {
       case '--base':
       case '--head':
         recordFlag(flags, arg);
-        revisions.set(arg, readRevision(args, index, arg));
+        revisions.set(arg, readOptionValue(args, index, arg, 'revision'));
         index++;
         break;
       case '--filter': {
-        const pattern = readRevision(args, index, arg);
+        const pattern = readOptionValue(args, index, arg, 'filter pattern');
         if (pattern.startsWith('!'))
           throw new UsageError('Negative --filter patterns are not supported.');
         filters.push(globExpression(pattern));

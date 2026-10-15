@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 import {
   mkdtemp,
   readFile,
@@ -14,13 +15,22 @@ import { expect, test } from 'vitest';
 import { repository } from './helpers.js';
 const executable = resolve('packages/cli/dist/cli.js');
 function cli(cwd: string, ...args: string[]) {
+  const temporaryRoot = join(cwd, '.difftrail-test-tmp');
+  mkdirSync(temporaryRoot, { recursive: true });
   return spawnSync(process.execPath, [executable, ...args], {
     cwd,
     encoding: 'utf8',
+    env: {
+      ...process.env,
+      TMPDIR: temporaryRoot,
+      TMP: temporaryRoot,
+      TEMP: temporaryRoot,
+    },
   });
 }
-async function snapshotDirectories(): Promise<string[]> {
-  return (await readdir(tmpdir()))
+async function snapshotDirectories(root: string): Promise<string[]> {
+  mkdirSync(join(root, '.difftrail-test-tmp'), { recursive: true });
+  return (await readdir(join(root, '.difftrail-test-tmp')))
     .filter((name) => name.startsWith('difftrail-snapshots-'))
     .sort();
 }
@@ -339,13 +349,13 @@ test('built CLI cleans snapshot directories after a Git blob read failure', asyn
       object.slice(0, 2),
       object.slice(2),
     );
-    const snapshotsBefore = await snapshotDirectories();
+    const snapshotsBefore = await snapshotDirectories(repo.root);
     await unlink(looseObject);
     const result = cli(repo.root, '--json');
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain('Git cat-file failed');
-    expect(await snapshotDirectories()).toEqual(snapshotsBefore);
+    expect(await snapshotDirectories(repo.root)).toEqual(snapshotsBefore);
   } finally {
     await repo.cleanup();
   }

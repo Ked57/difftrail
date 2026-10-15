@@ -45,14 +45,16 @@ The changed CLI output tests cover line, NUL, and JSON output; empty behavior;
 spaces, Unicode, dot paths, and a POSIX literal backslash; CR/LF filename
 handling; OR, `?`, `**`, and root-only glob behavior; post-graph filtering of
 returned and removed paths; filtered intermediate explanation paths; and
-endpoint-specific deletion explanations. Core tests cover shortest-chain and
-head-tie choice, path-order tie choice, and the prohibition on cross-snapshot
-chains.
+endpoint-specific deletion explanations. A dedicated CLI history fixture also
+covers recursive filters across an LF directory component with exact JSON and
+NUL output. Core tests cover shortest-chain and head-tie choice, path-order tie
+choice, and the prohibition on cross-snapshot chains.
 
 `pnpm verify:full` passed on the current Ticket 05 integration tip: formatting,
-ESLint and difficulty audit, TypeScript, 51 unit tests, 34 CLI integration
+ESLint and difficulty audit, TypeScript, 51 unit tests, 35 CLI integration
 tests, isolated npm and strict pnpm tarball installs, executable checks, and
 Knip. The core graph tests retained 100% statement, branch, function, and line
-coverage. A separate manual-QA job remains required and is not claimed here.
-The current host's tests do not establish Windows path behavior or
-platform-matrix support.
+coverage. Subprocess tests use fixture-local temporary directories, so cleanup
+assertions stay isolated while test files run in parallel. A separate manual-QA
+job remains required and is not claimed here. The current host's tests do not
+establish Windows path behavior or platform-matrix support.
