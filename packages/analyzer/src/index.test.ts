@@ -83,3 +83,32 @@ test('cleans isolated snapshot storage after both successful and failed extracti
     await repo.cleanup();
   }
 });
+
+test('distinguishes lexically bound require helpers from genuine CommonJS imports', async () => {
+  const repo = await repository({
+    'leaf.cjs': 'module.exports=1;',
+    'loader.js': 'export function loader(value) {return value;}',
+    'local.js':
+      "function require(value) {return value;} const input='local'; export const value=require(input); require('./not-a-module.js');",
+    'block.cjs':
+      "{const require=value=>value; require('./not-a-module.js');} module.exports=require('./leaf.cjs');",
+    'parameter.cjs':
+      "function invoke(require, value) {require(value); require('./not-a-module.js');} const leaf=require('./leaf.cjs'); module.exports={invoke,leaf};",
+    'imported.js':
+      "import {loader as require} from './loader.js'; const input='local'; export const value=require(input); require('./not-a-module.js');",
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(
+        graph.edges.map((edge) => [edge.importer, edge.dependency]).sort(),
+      ).toEqual([
+        ['block.cjs', 'leaf.cjs'],
+        ['imported.js', 'loader.js'],
+        ['parameter.cjs', 'leaf.cjs'],
+      ]);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});

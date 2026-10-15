@@ -48,7 +48,9 @@ test('built CLI returns exact latest-commit consumers as text and JSON from dirt
 
 test.each([
   ['missing import', "import './missing.js';"],
+  ['missing require', "require('./missing.js');"],
   ['variable import', 'const name="./leaf.js"; import(name);'],
+  ['variable require', 'const name="./leaf.js"; require(name);'],
   ['invalid JavaScript', 'const = ;'],
 ])('fails atomically on %s in either endpoint', async (_name, source) => {
   const repo = await repository({
@@ -79,6 +81,24 @@ test('succeeds with zero bytes for an empty commit and rejects invalid flags bef
     const invalid = cli(repo.root, '--unknown');
     expect(invalid.status).toBe(2);
     expect(invalid.stdout).toBe('');
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI accepts ordinary changes that use a local require helper', async () => {
+  const repo = await repository({ 'consumer.js': 'export const value=1;' });
+  try {
+    await repo.commit({
+      'consumer.js':
+        "function require(value) {return value;} const input='local'; export const value=require(input);",
+    });
+    const result = cli(repo.root);
+    expect({
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    }).toEqual({ status: 0, stdout: 'consumer.js\n', stderr: '' });
   } finally {
     await repo.cleanup();
   }
