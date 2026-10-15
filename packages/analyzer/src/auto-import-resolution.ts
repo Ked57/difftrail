@@ -245,5 +245,87 @@ function workspaceCondition(
     typeof manifest === 'object' && manifest !== null && 'type' in manifest
       ? manifest.type
       : undefined;
-  return type === 'module' ? 'import' : 'require';
+  if (type === 'module') return 'import';
+  if (type === 'commonjs') return 'require';
+  return importer.endsWith('.js') && hasNodeEsmSyntax(snapshot, importer)
+    ? 'import'
+    : 'require';
+}
+
+function hasNodeEsmSyntax(snapshot: Snapshot, importer: string): boolean {
+  const file = ts.createSourceFile(
+    importer,
+    readFileSync(resolve(snapshot.directory, importer), 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  if (file.statements.some(redeclaresCommonJsBinding)) return true;
+  return containsModuleOnlySyntax(file, false);
+}
+
+function redeclaresCommonJsBinding(statement: ts.Statement): boolean {
+  const bindings = new Set([
+    'require',
+    'module',
+    'exports',
+    '__dirname',
+    '__filename',
+  ]);
+  if (ts.isClassDeclaration(statement))
+    return statement.name !== undefined && bindings.has(statement.name.text);
+  if (
+    !ts.isVariableStatement(statement) ||
+    (statement.declarationList.flags &
+      (ts.NodeFlags.Let | ts.NodeFlags.Const)) ===
+      0
+  )
+    return false;
+  return statement.declarationList.declarations.some((declaration) =>
+    bindingNameMatches(declaration.name, bindings),
+  );
+}
+
+function bindingNameMatches(
+  name: ts.BindingName | ts.OmittedExpression,
+  bindings: ReadonlySet<string>,
+): boolean {
+  if (ts.isOmittedExpression(name)) return false;
+  if (ts.isIdentifier(name)) return bindings.has(name.text);
+  return name.elements.some(
+    (element) =>
+      ts.isBindingElement(element) &&
+      bindingNameMatches(element.name, bindings),
+  );
+}
+
+function containsModuleOnlySyntax(
+  node: ts.Node,
+  insideFunction: boolean,
+): boolean {
+  if (
+    ts.isImportDeclaration(node) ||
+    ts.isExportDeclaration(node) ||
+    ts.isExportAssignment(node) ||
+    (ts.canHaveModifiers(node) &&
+      ts
+        .getModifiers(node)
+        ?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) ||
+    (ts.isMetaProperty(node) &&
+      node.keywordToken === ts.SyntaxKind.ImportKeyword &&
+      node.name.text === 'meta')
+  )
+    return true;
+  if (
+    !insideFunction &&
+    (ts.isAwaitExpression(node) ||
+      (ts.isForOfStatement(node) && node.awaitModifier !== undefined))
+  )
+    return true;
+  const nestedFunction = insideFunction || ts.isFunctionLike(node);
+  let found = false;
+  node.forEachChild((child) => {
+    if (!found) found = containsModuleOnlySyntax(child, nestedFunction);
+  });
+  return found;
 }

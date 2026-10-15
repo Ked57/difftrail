@@ -5,6 +5,28 @@ import { withComparison } from '@difftrail/git';
 import { repository } from '../../../tests/helpers.js';
 import { autoImportEdges } from './auto-imports.js';
 
+function expectWorkspaceMapping(
+  edges: Awaited<ReturnType<typeof autoImportEdges>>,
+  importer: string,
+  target: string,
+  otherTarget: string,
+): void {
+  expect(edges).toContainEqual(
+    expect.objectContaining({
+      importer,
+      dependency: target,
+      kind: 'auto-import',
+    }),
+  );
+  expect(edges).not.toContainEqual(
+    expect.objectContaining({
+      importer,
+      dependency: otherTarget,
+      kind: 'auto-import',
+    }),
+  );
+}
+
 test('resolves committed Vue component and auto-import declarations to actual consumers', async () => {
   const repo = await repository({
     'vite.config.ts': [
@@ -289,6 +311,18 @@ test('selects workspace JS export conditions from each nearest package type', as
       dependencies: { '@demo/shared': 'workspace:*' },
     }),
     'apps/esm/src/page.js': 'export const page = useShared();',
+    'apps/detected/package.json': JSON.stringify({
+      name: 'syntax-detected-app',
+      dependencies: { '@demo/shared': 'workspace:*' },
+    }),
+    'apps/detected/src/page.js': 'export const page = useShared();',
+    'apps/defaultjs/package.json': JSON.stringify({
+      name: 'default-js-app',
+      dependencies: { '@demo/shared': 'workspace:*' },
+    }),
+    'apps/defaultjs/src/page.js':
+      "const page = useShared(); void import('./lazy.js');",
+    'apps/defaultjs/src/lazy.js': 'export const loaded = true;',
     'vite.config.ts': [
       "import AutoImport from 'unplugin-auto-import';",
       "export default AutoImport({ dts: false, imports: [{ '@demo/shared': ['useShared'] }] });",
@@ -297,48 +331,38 @@ test('selects workspace JS export conditions from each nearest package type', as
   try {
     await withComparison(repo.root, async (comparison) => {
       const edges = await autoImportEdges(comparison.headSnapshot);
-      expect(edges).toContainEqual(
-        expect.objectContaining({
-          importer: 'apps/commonjs/src/page.js',
-          dependency: 'packages/shared/src/require.cjs',
-          kind: 'auto-import',
-        }),
+      expectWorkspaceMapping(
+        edges,
+        'apps/commonjs/src/page.js',
+        'packages/shared/src/require.cjs',
+        'packages/shared/src/import.js',
       );
-      expect(edges).toContainEqual(
-        expect.objectContaining({
-          importer: 'apps/esm/src/page.js',
-          dependency: 'packages/shared/src/import.js',
-          kind: 'auto-import',
-        }),
+      expectWorkspaceMapping(
+        edges,
+        'apps/esm/src/page.js',
+        'packages/shared/src/import.js',
+        'packages/shared/src/require.cjs',
       );
-      expect(edges).not.toContainEqual(
-        expect.objectContaining({
-          importer: 'apps/commonjs/src/page.js',
-          dependency: 'packages/shared/src/import.js',
-          kind: 'auto-import',
-        }),
+      expectWorkspaceMapping(
+        edges,
+        'apps/detected/src/page.js',
+        'packages/shared/src/import.js',
+        'packages/shared/src/require.cjs',
       );
-      expect(edges).not.toContainEqual(
-        expect.objectContaining({
-          importer: 'apps/esm/src/page.js',
-          dependency: 'packages/shared/src/require.cjs',
-          kind: 'auto-import',
-        }),
+      expectWorkspaceMapping(
+        edges,
+        'apps/defaultjs/src/page.js',
+        'packages/shared/src/require.cjs',
+        'packages/shared/src/import.js',
       );
-      expect(edges).toContainEqual(
-        expect.objectContaining({
-          importer: 'apps/commonjs/src/page.js',
-          dependency: 'apps/commonjs/package.json',
-          kind: 'metadata',
-        }),
-      );
-      expect(edges).toContainEqual(
-        expect.objectContaining({
-          importer: 'apps/esm/src/page.js',
-          dependency: 'apps/esm/package.json',
-          kind: 'metadata',
-        }),
-      );
+      for (const app of ['commonjs', 'esm', 'detected'])
+        expect(edges).toContainEqual(
+          expect.objectContaining({
+            importer: `apps/${app}/src/page.js`,
+            dependency: `apps/${app}/package.json`,
+            kind: 'metadata',
+          }),
+        );
     });
   } finally {
     await repo.cleanup();

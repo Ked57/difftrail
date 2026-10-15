@@ -27,7 +27,12 @@ condition through a static resolver rooted at that endpoint's consumer
 directory. `.mjs` and `.mts` select `import`; `.cjs` and `.cts` select `require`;
 `.vue`, `.jsx`, and `.tsx` use `import`; `.js` and `.ts` follow the nearest
 committed consumer manifest's `type` field. That manifest is retained as a
-metadata edge. Tool-install paths do not participate. The graph retains
+metadata edge. For `.js` without an explicit `type`, the analyzer applies
+Node 22 syntax detection to the committed source AST: static import/export,
+`import.meta`, top-level `await`, or a top-level lexical redeclaration of a
+CommonJS wrapper binding selects `import`; otherwise it selects `require`.
+Dynamic `import()` alone does not select `import`. Tool-install paths do not
+participate. The graph retains
 workspace membership, package, and consuming manifest edges. External package
 identities require matching endpoint manifest, lockfile, and installed package
 evidence and remain terminal package dependencies. Same-basename files do not
@@ -73,6 +78,6 @@ gaps, Vue native and built-in tags, workspace `.js` conditions from nearest
 package manifests, and conflicting mappings. The packed CLI
 fixture checks mapping-only consumer selection, snapshot-rooted ESM and
 CommonJS workspace export branches selected for `.js` consumers by their
-nearest package `type` despite a conflicting package beside the installed CLI,
-and no-partial-output kebab-case component failures at base and head. Manual QA
-of the CLI remains with the separate QA job.
+nearest package `type` or Node syntax detection despite a conflicting package
+beside the installed CLI, and no-partial-output kebab-case component failures
+at base and head. Manual QA of the CLI remains with the separate QA job.

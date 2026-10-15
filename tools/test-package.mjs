@@ -326,6 +326,8 @@ try {
             devDependencies: { 'unplugin-auto-import': '1.0.0' },
           },
           'apps/commonjs': { name: 'commonjs-app' },
+          'apps/detected': { name: 'syntax-detected-app' },
+          'apps/defaultjs': { name: 'default-js-app' },
           'apps/esm': { name: 'esm-app' },
           'packages/shared': { name: '@demo/shared' },
           'node_modules/unplugin-auto-import': { version: '1.0.0' },
@@ -357,6 +359,14 @@ try {
         type: 'commonjs',
         dependencies: { '@demo/shared': 'workspace:*' },
       }),
+      'apps/detected/package.json': JSON.stringify({
+        name: 'syntax-detected-app',
+        dependencies: { '@demo/shared': 'workspace:*' },
+      }),
+      'apps/defaultjs/package.json': JSON.stringify({
+        name: 'default-js-app',
+        dependencies: { '@demo/shared': 'workspace:*' },
+      }),
       'apps/esm/package.json': JSON.stringify({
         name: 'esm-app',
         type: 'module',
@@ -377,6 +387,10 @@ try {
       'apps/site/src/page.ts': 'export const page = useShared();',
       'apps/site/src/page.cjs': 'exports.page = useShared();',
       'apps/commonjs/src/page.js': 'exports.page = useShared();',
+      'apps/detected/src/page.js': 'export const page = useShared();',
+      'apps/defaultjs/src/page.js':
+        "const page = useShared(); void import('./lazy.js');",
+      'apps/defaultjs/src/lazy.js': 'export const loaded = true;',
       'apps/esm/src/page.js': 'export const page = useShared();',
     },
     'baseline workspace auto-import mapping',
@@ -418,6 +432,8 @@ try {
   assert.ok(workspaceOutput.includes('packages/shared/src/import.js'));
   assert.ok(workspaceOutput.includes('apps/site/src/page.ts'));
   assert.ok(workspaceOutput.includes('apps/esm/src/page.js'));
+  assert.ok(workspaceOutput.includes('apps/detected/src/page.js'));
+  assert.equal(workspaceOutput.includes('apps/defaultjs/src/page.js'), false);
   assert.equal(workspaceOutput.includes('apps/commonjs/src/page.js'), false);
   assert.ok(
     workspaceOutput.includes('packages/shared/src/require.cjs') === false,
@@ -431,7 +447,9 @@ try {
   assert.ok(requireOutput.includes('packages/shared/src/require.cjs'));
   assert.ok(requireOutput.includes('apps/site/src/page.cjs'));
   assert.ok(requireOutput.includes('apps/commonjs/src/page.js'));
+  assert.ok(requireOutput.includes('apps/defaultjs/src/page.js'));
   assert.equal(requireOutput.includes('apps/esm/src/page.js'), false);
+  assert.equal(requireOutput.includes('apps/detected/src/page.js'), false);
   assert.ok(requireOutput.includes('packages/shared/src/import.js') === false);
   const pnpmConsumer = join(temporary, 'pnpm-consumer');
   await mkdir(pnpmConsumer);
