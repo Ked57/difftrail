@@ -29,9 +29,8 @@ dependency. npm declarations are checked against their matching lock section
 (dependencies, devDependencies, optionalDependencies, or peerDependencies),
 including workspace importer sections. The implemented evidence formats are
 npm package-lock v2/v3 with node_modules/.package-lock.json, and pnpm lockfile
-v9 with its installed lockfile and modules metadata. The npm proof currently
-supports the root-level package layout. pnpm requires the installed lock
-metadata to match the committed lock. Missing or mismatched evidence fails
+v9 with its installed lockfile and modules metadata. pnpm requires the installed
+lock metadata to match the committed lock. Missing or mismatched evidence fails
 with an analysis gap; the analyzer never installs packages or runs repository
 scripts.
 
