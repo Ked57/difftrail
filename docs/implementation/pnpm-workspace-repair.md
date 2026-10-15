@@ -66,3 +66,7 @@ tests, 36 integration tests, isolated npm and pnpm package checks, and Knip.
 The normal-install CLI regression was also run independently while developing
 the fix; it failed with the root `node_modules/chalk` ENOENT under the previous
 lookup and passed with importer-scoped evidence.
+
+The final integration pin, independent review chronology, packed-package QA,
+and unverified platform limits are recorded in
+[pnpm workspace repair verification](../verification/pnpm-workspace-repair.md).
