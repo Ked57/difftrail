@@ -8,7 +8,7 @@ npx difftrail
 npx difftrail --json
 ```
 
-Requires Git and Node 22.13+ or Node 24. The current foundation release supports static JavaScript imports and CommonJS in committed snapshots. Required unsupported syntax or unresolved dependencies fail with status 1 and no stdout. TypeScript, Vue, workspace resolution and advanced flags are delivered by the following implementation tickets.
+Requires Git and Node 22.13+ or Node 24. By default, compares `HEAD` with its first parent; a genuine root commit uses an empty base. Use `--base A [--head B]` for direct endpoint comparison or add `--merge-base` to compare from the common ancestor. Change seeds come from the net endpoint difference, with both names of renames retained; dirty working-tree changes are ignored. Required unsupported syntax or unresolved dependencies fail with status 1 and no stdout. TypeScript, Vue, workspace resolution and output filters are delivered by following implementation tickets.
 
 Default output is sorted repository-relative existing impacted files, one per line. JSON adds `root`, resolved `base`/`head`, `scope: "static"`, `files` and `removed`. The CLI does not run tests or replace required checks. It never checks out a revision or runs project scripts.
 

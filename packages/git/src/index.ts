@@ -16,19 +16,25 @@ export interface Comparison {
   readonly baseSnapshot: Snapshot;
   readonly headSnapshot: Snapshot;
 }
+export interface ComparisonOptions {
+  readonly base?: string;
+  readonly head?: string;
+  readonly mergeBase?: boolean;
+}
 async function git(cwd: string, args: readonly string[]): Promise<Buffer> {
   return new Promise((accept, reject) => {
-    const process = spawn('git', [...args], {
+    const child = spawn('git', [...args], {
       cwd,
       shell: false,
       windowsHide: true,
+      env: { ...process.env, GIT_NO_LAZY_FETCH: '1' },
     });
     const output: Buffer[] = [];
     const errors: Buffer[] = [];
-    process.stdout.on('data', (chunk: Buffer) => output.push(chunk));
-    process.stderr.on('data', (chunk: Buffer) => errors.push(chunk));
-    process.on('error', reject);
-    process.on('close', (code) => {
+    child.stdout.on('data', (chunk: Buffer) => output.push(chunk));
+    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk));
+    child.on('error', reject);
+    child.on('close', (code) => {
       if (code !== 0)
         reject(
           new Error(
@@ -71,52 +77,92 @@ async function materialize(
   }
   return { revision, directory, paths };
 }
+async function resolveCommit(
+  root: string,
+  revision: string,
+  purpose: string,
+): Promise<string> {
+  try {
+    return (
+      await git(root, [
+        'rev-parse',
+        '--verify',
+        '--end-of-options',
+        `${revision}^{commit}`,
+      ])
+    )
+      .toString()
+      .trim();
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Cannot resolve ${purpose} revision ${JSON.stringify(revision)}: ${cause}. Check that it names an available commit and required history is present.`,
+      { cause: error },
+    );
+  }
+}
+async function firstParent(root: string, head: string): Promise<string | null> {
+  const commit = (await git(root, ['cat-file', '-p', head])).toString();
+  const parent = /^parent ([0-9a-f]+)$/m.exec(commit)?.[1];
+  if (!parent) return null;
+  return resolveCommit(root, parent, 'first parent');
+}
+async function selectEndpoints(
+  root: string,
+  options: ComparisonOptions,
+): Promise<{ base: string | null; head: string }> {
+  if (options.base === undefined) {
+    const head = await resolveCommit(root, 'HEAD', 'HEAD');
+    return { base: await firstParent(root, head), head };
+  }
+  const head = await resolveCommit(root, options.head ?? 'HEAD', 'head');
+  const requestedBase = await resolveCommit(root, options.base, 'base');
+  const base = options.mergeBase
+    ? (await git(root, ['merge-base', requestedBase, head])).toString().trim()
+    : requestedBase;
+  return { base: await resolveCommit(root, base, 'merge-base'), head };
+}
+async function changedPaths(
+  root: string,
+  base: string | null,
+  head: string,
+  headPaths: readonly string[],
+): Promise<string[]> {
+  if (base === null) return [...headPaths];
+  return (
+    await git(root, [
+      'diff',
+      '--no-renames',
+      '--no-ext-diff',
+      '--no-textconv',
+      '--name-only',
+      '-z',
+      base,
+      head,
+    ])
+  )
+    .toString()
+    .split('\0')
+    .filter(Boolean);
+}
 /** Materialize committed endpoints; always removes only tool-owned temporary storage. */
 export async function withComparison<T>(
   cwd: string,
   run: (comparison: Comparison) => Promise<T>,
+  options: ComparisonOptions = {},
 ): Promise<T> {
   const root = (await git(cwd, ['rev-parse', '--show-toplevel']))
     .toString()
     .trimEnd();
-  const head = (
-    await git(root, [
-      'rev-parse',
-      '--verify',
-      '--end-of-options',
-      'HEAD^{commit}',
-    ])
-  )
-    .toString()
-    .trim();
-  const commit = (await git(root, ['cat-file', '-p', head])).toString();
-  const base = /^parent ([0-9a-f]+)$/m.exec(commit)?.[1] ?? null;
-  const temporary = await realpath(
-    await mkdtemp(join(tmpdir(), 'difftrail-snapshots-')),
-  );
+  const { base, head } = await selectEndpoints(root, options);
+  const temporaryPath = await mkdtemp(join(tmpdir(), 'difftrail-snapshots-'));
   try {
+    const temporary = await realpath(temporaryPath);
     const baseSnapshot = await materialize(root, base, join(temporary, 'base'));
     const headSnapshot = await materialize(root, head, join(temporary, 'head'));
-    const seeds =
-      base === null
-        ? [...headSnapshot.paths]
-        : (
-            await git(root, [
-              'diff-tree',
-              '--no-commit-id',
-              '--name-only',
-              '-r',
-              '-z',
-              '--no-renames',
-              base,
-              head,
-            ])
-          )
-            .toString()
-            .split('\0')
-            .filter(Boolean);
+    const seeds = await changedPaths(root, base, head, headSnapshot.paths);
     return await run({ root, base, head, seeds, baseSnapshot, headSnapshot });
   } finally {
-    await rm(temporary, { recursive: true, force: true });
+    await rm(temporaryPath, { recursive: true, force: true });
   }
 }
