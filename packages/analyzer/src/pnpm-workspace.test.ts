@@ -166,3 +166,74 @@ test('resolves each pnpm workspace importer and rejects missing or mismatched in
     await repo.cleanup();
   }
 });
+
+test('attributes dependency evidence gaps to a source that imports that dependency', async () => {
+  const lock = [
+    'lockfileVersion: 9.0',
+    'settings: {}',
+    'importers:',
+    '  .: {}',
+    '  apps/first:',
+    '    dependencies:',
+    '      good-leaf:',
+    '        specifier: 1.0.0',
+    '        version: 1.0.0',
+    '      bad-leaf:',
+    '        specifier: 2.0.0',
+    '        version: 2.0.0',
+    'packages:',
+    '  good-leaf@1.0.0:',
+    '    resolution: {integrity: sha512-good}',
+    '  bad-leaf@2.0.0:',
+    '    resolution: {integrity: sha512-bad}',
+    'snapshots:',
+    '  good-leaf@1.0.0: {}',
+    '  bad-leaf@2.0.0: {}',
+  ].join('\n');
+  const repo = await repository({
+    '.gitignore': 'node_modules/\n',
+    'package.json': JSON.stringify({ name: 'pnpm-workspace', private: true }),
+    'pnpm-workspace.yaml': 'packages:\n  - apps/*\n',
+    'pnpm-lock.yaml': lock,
+    'apps/first/package.json': JSON.stringify({
+      name: 'first-app',
+      dependencies: { 'good-leaf': '1.0.0', 'bad-leaf': '2.0.0' },
+    }),
+    'apps/first/a-good.js': "import 'good-leaf';",
+    'apps/first/z-bad.js': "import 'bad-leaf';",
+  });
+  try {
+    for (const [name, installedVersion] of [
+      ['good-leaf', '1.0.0'],
+      ['bad-leaf', '1.0.0'],
+    ] as const) {
+      const packageRoot = join(
+        repo.root,
+        'node_modules/.pnpm',
+        `${name}@${installedVersion}/node_modules/${name}`,
+      );
+      await mkdir(packageRoot, { recursive: true });
+      await writeFile(
+        join(packageRoot, 'package.json'),
+        JSON.stringify({ name, version: installedVersion, main: 'index.js' }),
+      );
+      await writeFile(join(packageRoot, 'index.js'), 'export const value = 1;');
+      const modules = join(repo.root, 'apps/first/node_modules');
+      await mkdir(modules, { recursive: true });
+      await symlink(packageRoot, join(modules, name), 'dir');
+    }
+    await mkdir(join(repo.root, 'node_modules/.pnpm'), { recursive: true });
+    await writeFile(
+      join(repo.root, 'node_modules/.modules.yaml'),
+      'virtualStoreDir: .pnpm\n',
+    );
+    await writeFile(join(repo.root, 'node_modules/.pnpm/lock.yaml'), lock);
+    await withComparison(repo.root, async (comparison) =>
+      expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
+        /Analysis gap in apps\/first\/z-bad\.js at .*apps\/first\/package\.json: installed package identity for bad-leaf does not match pnpm-lock\.yaml/,
+      ),
+    );
+  } finally {
+    await repo.cleanup();
+  }
+});

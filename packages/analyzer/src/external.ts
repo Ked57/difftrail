@@ -5,7 +5,10 @@ import { access, mkdir, readFile, symlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import type { Snapshot } from '@difftrail/git';
-import { withImporterContext } from './external-errors.js';
+import {
+  withDependencyContext,
+  withImporterContext,
+} from './external-errors.js';
 
 interface PackageManifest {
   readonly name?: unknown;
@@ -169,7 +172,7 @@ async function prepareNpmEvidence(
   const state = await loadNpmLockState(snapshot, committed, lockfile);
   const evidence = new Map<string, ExternalPackageEvidence>();
   for (const [manifestPath, packages] of requests)
-    await withImporterContext(manifestPath, packages, () =>
+    await withImporterContext(manifestPath, () =>
       addNpmImporterEvidence(snapshot, state, manifestPath, packages, evidence),
     );
   return evidence;
@@ -230,24 +233,26 @@ async function addNpmImporterEvidence(
     `${state.lockfile} importer ${importerKey}`,
   );
   for (const [name, sources] of names) {
-    const declaration = dependencyDeclaration(manifest, name);
-    if (!declaration)
-      throw new Error(
-        `${manifestPath} does not declare external dependency ${name}`,
+    await withDependencyContext(manifestPath, sources, async () => {
+      const declaration = dependencyDeclaration(manifest, name);
+      if (!declaration)
+        throw new Error(
+          `${manifestPath} does not declare external dependency ${name}`,
+        );
+      const section = requireRecord(
+        entry[declaration.section],
+        `${state.lockfile} ${declaration.section} for ${importerKey}`,
       );
-    const section = requireRecord(
-      entry[declaration.section],
-      `${state.lockfile} ${declaration.section} for ${importerKey}`,
-    );
-    const result = await validateNpmPackage(
-      snapshot,
-      state,
-      manifestPath,
-      manifest,
-      section,
-      name,
-    );
-    addEvidenceSources(evidence, result, name, sources);
+      const result = await validateNpmPackage(
+        snapshot,
+        state,
+        manifestPath,
+        manifest,
+        section,
+        name,
+      );
+      for (const source of sources) evidence.set(`${source}\0${name}`, result);
+    });
   }
 }
 
@@ -343,7 +348,7 @@ async function preparePnpmEvidence(
   };
   const evidence = new Map<string, ExternalPackageEvidence>();
   for (const [manifestPath, names] of requests)
-    await withImporterContext(manifestPath, names, () =>
+    await withImporterContext(manifestPath, () =>
       addPnpmImporterEvidence(snapshot, state, manifestPath, names, evidence),
     );
   return evidence;
@@ -370,34 +375,40 @@ async function addPnpmImporterEvidence(
     entry.optionalDependencies,
   ];
   for (const [name, sources] of names) {
-    const locked = findPnpmDependency(sections, name, state.lockfile);
-    checkDeclaration(
-      manifestPath,
-      manifest,
-      name,
-      locked.specifier,
-      state.lockfile,
-    );
-    const identity = pnpmPackageIdentity(locked.version, name, state.lockfile);
-    const packageRoot = join(
-      state.installedRoot,
-      dirname(manifestPath),
-      packagePath(name),
-    );
-    await validateInstalledIdentity(
-      packageRoot,
-      identity.name,
-      identity.version,
-      state.lockfile,
-    );
-    await ensureSnapshotLink(snapshot, name, packageRoot, manifestPath);
-    const result = {
-      name,
-      packageRoot,
-      manifest: manifestPath,
-      lockfile: state.lockfile,
-    };
-    addEvidenceSources(evidence, result, name, sources);
+    await withDependencyContext(manifestPath, sources, async () => {
+      const locked = findPnpmDependency(sections, name, state.lockfile);
+      checkDeclaration(
+        manifestPath,
+        manifest,
+        name,
+        locked.specifier,
+        state.lockfile,
+      );
+      const identity = pnpmPackageIdentity(
+        locked.version,
+        name,
+        state.lockfile,
+      );
+      const packageRoot = join(
+        state.installedRoot,
+        dirname(manifestPath),
+        packagePath(name),
+      );
+      await validateInstalledIdentity(
+        packageRoot,
+        identity.name,
+        identity.version,
+        state.lockfile,
+      );
+      await ensureSnapshotLink(snapshot, name, packageRoot, manifestPath);
+      const result = {
+        name,
+        packageRoot,
+        manifest: manifestPath,
+        lockfile: state.lockfile,
+      };
+      for (const source of sources) evidence.set(`${source}\0${name}`, result);
+    });
   }
 }
 
@@ -464,15 +475,6 @@ async function validateInstalledIdentity(
     throw new Error(
       `installed package identity for ${name} does not match ${lockfile}`,
     );
-}
-
-function addEvidenceSources(
-  evidence: Map<string, ExternalPackageEvidence>,
-  result: ExternalPackageEvidence,
-  name: string,
-  sources: ReadonlySet<string>,
-): void {
-  for (const source of sources) evidence.set(`${source}\0${name}`, result);
 }
 
 /** Proves ordinary installed package targets against endpoint manifests and lock metadata. */
