@@ -17,6 +17,8 @@ Specification: [#12 — implement the Difftrail impacted-file CLI and example mo
 
 All eight are native sub-issues of #12 and labelled `ready-for-agent`. GitHub native dependencies determine the frontier. Slice 07 may run alongside 06 after #15/#16/#17 are resolved. Ticket closure follows the integration PR workflow; implementation completion and blocker release must have review, repairs, relevant gates and actual manual-QA evidence.
 
+Ticket #13 implementation is complete on `codex/difftrail-cli` at integration commit `fa5fc20ead54f52c6fde5d6473d9e68ed70bf0c1`. Its review, automated gate, manual-QA results, and remaining limits are recorded in [Ticket 01 verification](../verification/ticket-01.md). Native issue closure and the integration PR remain part of the PR workflow.
+
 For ticket dispatch, read [ticket-proposal.md](ticket-proposal.md) and its acceptance matrix. For independent specification/final acceptance review, use [acceptance-checklist.md](acceptance-checklist.md). For bootstrap tool/runtime/version evidence, consult [tooling-research.md](tooling-research.md). These documents record planning/source review; they claim no implementation or executed runtime evidence.
 
 After the first product-code merge, open a draft PR against `master` closing #12 and #13–#20. Mark it ready after final acceptance/review/repairs; npm publication and PR merge are separate actions.
