@@ -23,6 +23,8 @@ Ticket #14 implementation is complete on `codex/difftrail-cli` at integration me
 
 Ticket #15 implementation is complete on `codex/difftrail-cli` at integration merge commit `f139f547ddb84b60de61e96294dcdd8e35e2fdb6`. Its review, automated gate, manual-QA results, and remaining limits are recorded in [Ticket 03 verification](../verification/ticket-03.md). Native issue closure and the integration PR remain part of the PR workflow.
 
+Ticket #16 implementation is complete on `codex/difftrail-cli` at integration merge commit `c8b372ad58c7ae290c7a20a5d8555d0cebfe07a3`. Its review, automated gate, manual-QA results, and remaining limits are recorded in [Ticket 04 verification](../verification/ticket-04.md). Native issue closure and the integration PR remain part of the PR workflow.
+
 For ticket dispatch, read [ticket-proposal.md](ticket-proposal.md) and its acceptance matrix. For independent specification/final acceptance review, use [acceptance-checklist.md](acceptance-checklist.md). For bootstrap tool/runtime/version evidence, consult [tooling-research.md](tooling-research.md). These documents record planning/source review; they claim no implementation or executed runtime evidence.
 
 After the first product-code merge, open a draft PR against `master` closing #12 and #13–#20. Mark it ready after final acceptance/review/repairs; npm publication and PR merge are separate actions.
