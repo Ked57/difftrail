@@ -40,7 +40,18 @@ try {
   assert.ok(archive, 'pack produced a tarball');
   const consumer = join(temporary, 'consumer');
   await mkdir(consumer);
-  await writeFile(join(consumer, 'package.json'), '{}');
+  await writeFile(
+    join(consumer, 'package.json'),
+    JSON.stringify({
+      private: true,
+      dependencies: {
+        '@vue/compiler-dom': '3.5.13',
+        '@vue/compiler-sfc': '3.5.13',
+        postcss: '8.4.49',
+        typescript: '5.7.3',
+      },
+    }),
+  );
   run(
     'npm',
     [
@@ -60,6 +71,7 @@ try {
   assert.equal(manifest.license, 'Apache-2.0');
   assert.equal(manifest.bin.difftrail, 'dist/cli.js');
   assert.equal(manifest.dependencies['dependency-cruiser'], '18.6.0');
+  assert.equal(manifest.dependencies['@vue/compiler-sfc'], '3.5.44');
   assert.equal(manifest.dependencies.typescript, '6.0.3');
   assert.ok(!JSON.stringify(manifest.dependencies).includes('workspace:'));
   const code = await readFile(join(packageRoot, 'dist/cli.js'), 'utf8');
@@ -102,6 +114,58 @@ try {
     await readFile('packages/cli/tests/parser-smoke.mjs'),
   );
   run(process.execPath, [parserSmoke, fixture], consumer);
+  const vueFixture = join(temporary, 'vue-repository');
+  await mkdir(vueFixture);
+  run('git', ['init', '--quiet'], vueFixture);
+  run('git', ['config', 'user.email', 'fixture@example.invalid'], vueFixture);
+  run('git', ['config', 'user.name', 'Fixture'], vueFixture);
+  for (const [path, contents] of Object.entries({
+    'App.vue':
+      '<template><Page /></template><script setup>import Page from "./Page.vue";</script>',
+    'Use.vue':
+      '<template><Page /></template><script lang="ts">import Page = require("./Page.vue"); type Shape = import("./shape").Shape;</script>',
+    'Page.vue': [
+      '<template src="./template.html"></template>',
+      '<script src="./logic.js"></script>',
+      '<style src="./style.css"></style>',
+    ].join('\n'),
+    'template.html': '<img src="./image.png" />',
+    'logic.js': 'export const ready = true;',
+    'style.css':
+      '@import "./tokens.css"; .hero { content: "url(\'./not-an-asset.png\')"; background: url("./image.png") }',
+    'tokens.css': ':root { --color: red; }',
+    'image.png': 'before',
+    'shape.ts': 'export interface Shape { readonly value: number }',
+  }))
+    await writeFile(join(vueFixture, path), contents);
+  run('git', ['add', '--all'], vueFixture);
+  run('git', ['commit', '--quiet', '-m', 'Vue baseline'], vueFixture);
+  await writeFile(join(vueFixture, 'image.png'), 'after');
+  run('git', ['commit', '--quiet', '-am', 'change Vue asset'], vueFixture);
+  assert.equal(
+    run(bin, [], vueFixture),
+    'App.vue\nPage.vue\nUse.vue\nimage.png\nstyle.css\ntemplate.html\n',
+  );
+  await writeFile(
+    join(vueFixture, 'shape.ts'),
+    'export interface Shape { readonly value: string }',
+  );
+  run(
+    'git',
+    ['commit', '--quiet', '-am', 'change Vue imported type'],
+    vueFixture,
+  );
+  assert.equal(run(bin, [], vueFixture), 'Use.vue\nshape.ts\n');
+  await writeFile(join(vueFixture, 'Page.vue'), '<template><main></template>');
+  run('git', ['commit', '--quiet', '-am', 'invalid Vue template'], vueFixture);
+  const invalidVue = spawnSync(
+    process.execPath,
+    [join(packageRoot, 'dist', 'cli.js')],
+    { cwd: vueFixture, encoding: 'utf8' },
+  );
+  assert.equal(invalidVue.status, 1);
+  assert.equal(invalidVue.stdout, '');
+  assert.ok(invalidVue.stderr.includes('Page.vue'));
   const pnpmConsumer = join(temporary, 'pnpm-consumer');
   await mkdir(pnpmConsumer);
   await writeFile(
@@ -167,7 +231,7 @@ try {
     ].join('\n') + '\n',
   );
   console.log(
-    'Isolated npm and strict pnpm tarball installs, CLI, config-alias resolver, bundled modules, license, metadata and TypeScript parser passed.',
+    'Isolated npm and strict pnpm tarball installs, CLI, Vue assets with conflicting consumer parsers, config-alias resolver, bundled modules, license, metadata and TypeScript parser passed.',
   );
 } finally {
   await rm(temporary, { recursive: true, force: true });

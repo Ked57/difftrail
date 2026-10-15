@@ -8,6 +8,7 @@ await build({
   format: 'esm',
   target: 'node22',
   external: [
+    '@vue/compiler-sfc',
     'dependency-cruiser',
     'enhanced-resolve/lib/createInnerCallback',
     'typescript',

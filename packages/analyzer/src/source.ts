@@ -2,19 +2,26 @@ import { resolve } from 'node:path';
 import ts from 'typescript';
 import type { Snapshot } from '@difftrail/git';
 import { commonJsLoader, factoryGap } from './require.js';
+import { inspectExplicitSource } from './explicit.js';
+import { analysisGap as gap } from './errors.js';
 
 export interface SourceInspection {
   readonly specifiers: ReadonlySet<string>;
   readonly loaderNames: ReadonlySet<string>;
   readonly relationships: readonly SourceRelationship[];
+  readonly localReferences: readonly SourceRelationship[];
 }
 
-interface SourceRelationship {
+export interface SourceRelationship {
   readonly specifier: string;
   readonly kind: string;
 }
 
-export const supportedSourcePattern = /\.(?:[cm]?js|[cm]?ts|jsx|tsx)$/;
+export function isCommonJsRelationship(kind: string): boolean {
+  return kind === 'require' || kind === 'import-equals';
+}
+
+export const supportedSourcePattern = /\.(?:[cm]?js|[cm]?ts|jsx|tsx|vue)$/;
 
 export async function inspectSources(
   snapshot: Snapshot,
@@ -29,14 +36,30 @@ async function inspectSource(
   snapshot: Snapshot,
   file: string,
 ): Promise<SourceInspection> {
-  if (/\.(?:vue|css|scss|sass|less)$/.test(file))
-    throw gap(
-      snapshot,
-      file,
-      'required syntax is not supported by this release yet',
-    );
+  if (/\.vue$/.test(file) || /\.(?:css|scss|sass|less)$/.test(file)) {
+    try {
+      const explicit = await inspectExplicitSource(snapshot, file);
+      return {
+        specifiers: new Set(),
+        loaderNames: new Set(),
+        relationships: explicit.moduleRelationships,
+        localReferences: explicit.localReferences,
+      };
+    } catch (error) {
+      throw gap(
+        snapshot,
+        file,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
   if (!supportedSourcePattern.test(file))
-    return { specifiers: new Set(), loaderNames: new Set(), relationships: [] };
+    return {
+      specifiers: new Set(),
+      loaderNames: new Set(),
+      relationships: [],
+      localReferences: [],
+    };
   const filename = resolve(snapshot.directory, file);
   const program = ts.createProgram([filename], {
     allowJs: true,
@@ -76,7 +99,12 @@ async function inspectSource(
     ts.forEachChild(node, visit);
   }
   visit(source);
-  return { specifiers: requiredSpecifiers, loaderNames, relationships };
+  return {
+    specifiers: requiredSpecifiers,
+    loaderNames,
+    relationships,
+    localReferences: [],
+  };
 }
 
 function recordRelationship(
@@ -172,10 +200,4 @@ function recordCallRelationship(
     requiredSpecifiers.add(first.text);
     if (expression.text !== 'require') loaderNames.add(expression.text);
   }
-}
-
-function gap(snapshot: Snapshot, file: string, reason: string): Error {
-  return new Error(
-    `Analysis gap in ${file} at ${snapshot.revision ?? 'empty base'}: ${reason}`,
-  );
 }

@@ -13,8 +13,11 @@ import {
   workspaceForSpecifier,
 } from './workspaces.js';
 import { externalEvidenceFor, prepareExternalEvidence } from './external.js';
+import { localReferenceEdges } from './local.js';
+import { analysisGap as gap } from './errors.js';
 import {
   inspectSources,
+  isCommonJsRelationship,
   supportedSourcePattern,
   type SourceInspection,
 } from './source.js';
@@ -112,7 +115,7 @@ function createPathsPlugin(
       typeof config.options.pathsBasePath === 'string'
         ? config.options.pathsBasePath
         : undefined,
-    extensions: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'],
+    extensions: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue'],
     silent: true,
   });
 }
@@ -154,11 +157,6 @@ async function cruiseCondition(
     throw gap(snapshot, '<graph>', 'extractor returned an unexpected report');
   return output.output.modules.map((module) => ({ module, condition }));
 }
-function gap(snapshot: Snapshot, file: string, reason: string): Error {
-  return new Error(
-    `Analysis gap in ${file} at ${snapshot.revision ?? 'empty base'}: ${reason}`,
-  );
-}
 function aliasMatches(pattern: string, specifier: string): boolean {
   const wildcard = pattern.indexOf('*');
   if (wildcard < 0) return pattern === specifier;
@@ -172,7 +170,13 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
   const sources = snapshot.paths.filter((file) =>
     supportedSourcePattern.test(file),
   );
-  if (sources.length === 0) return { revision: snapshot.revision, edges: [] };
+  const localEdges = await localReferenceEdges(
+    snapshot,
+    sources,
+    requiredSpecifiers,
+  );
+  if (sources.length === 0)
+    return { revision: snapshot.revision, edges: localEdges };
   const resolution = await prepareResolution(
     snapshot,
     sources,
@@ -185,7 +189,7 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
     requiredSpecifiers,
     resolution,
   );
-  edges.push(...extracted.configurationEdges);
+  edges.push(...extracted.configurationEdges, ...localEdges);
   return { revision: snapshot.revision, edges };
 }
 
@@ -497,10 +501,6 @@ async function localDependencyEdges(
       kind: 'metadata',
     })),
   ];
-}
-
-function isCommonJsRelationship(kind: string): boolean {
-  return kind === 'require' || kind === 'import-equals';
 }
 
 async function checkedWorkspaceConsumer(
