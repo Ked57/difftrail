@@ -1,15 +1,17 @@
 # Package CI repair verification
 
-Status: **locally verified; repaired Linux and Windows CI pending**. The
-repair commit is [`07e3c3c`](https://github.com/Ked57/difftrail/commit/07e3c3c0a68c32720a3eea396d1bb2d51ca7d79).
+Status: **local and Ubuntu CI verification passed; Windows remains unverified**.
+The repair commit is
+[`07e3c3c`](https://github.com/Ked57/difftrail/commit/07e3c3c0a68c32720a3eea396d1bb2d51ca7d79).
 
 ## Failure and repair
 
-Draft PR #21's Linux run [38745046957, job
+Draft PR #21's push run [38745046957, job
 116456391032](https://github.com/Ked57/difftrail/actions/runs/38745046957/job/116456391032)
-and Windows run [38745054034, job
+and pull-request run [38745054034, job
 116456413927](https://github.com/Ked57/difftrail/actions/runs/38745054034/job/116456413927)
-were against base commit `ef680a580e29801174ad8a6dcd05397a6e10e3e7`. Both
+were separate events on `ubuntu-latest` against base commit
+`ef680a580e29801174ad8a6dcd05397a6e10e3e7`. Both
 passed fast checks and 30 CLI integration tests, then the packed pnpm consumer
 failed because offline mode could not find metadata for
 `dependency-cruiser@18.6.0` (`ERR_PNPM_NO_OFFLINE_META`). These runs document the
@@ -42,10 +44,22 @@ at `/private/tmp/package-ci-standards-review.md`,
 `/private/tmp/package-ci-spec-review.md`, and
 `/private/tmp/package-ci-manual-qa-luna.md`.
 
+## Fresh GitHub CI
+
+The integrated commit
+[`4e52dd1`](https://github.com/Ked57/difftrail/commit/4e52dd168a8a5379e90094d725bfb1c10485b913)
+passed `pnpm verify:full` on Ubuntu in both the
+[push run 38748003731](https://github.com/Ked57/difftrail/actions/runs/38748003731)
+and [pull-request run 38748016338](https://github.com/Ked57/difftrail/actions/runs/38748016338).
+Each run passed the required quality job; each skipped the manual-only mutation
+job. These are two trigger events for the same Ubuntu workflow, not separate
+platform results. The workflow defines only `ubuntu-latest`.
+
 ## Limits
 
-The Linux and Windows failures above predate the repair. Fresh CI results for
-the pushed integration commit are required before claiming those platforms
-pass. Local evidence covers macOS only. This is a package-fixture change and
-does not add a new Difftrail runtime network path; network access is used only
-when pnpm installs the test consumer's dependencies.
+The two historical Ubuntu failures above predate the repair. Fresh Ubuntu CI
+passed as recorded above. Windows and macOS CI have no runner in the current
+workflow and remain unverified; Node 24 is also unverified. Local evidence
+covers macOS with Node 22.23.1. This is a package-fixture change and does not
+add a new Difftrail runtime network path; network access is used only when pnpm
+installs the test consumer's dependencies.
