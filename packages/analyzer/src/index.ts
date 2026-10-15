@@ -6,13 +6,14 @@ import ts from 'typescript';
 import type { DependencyEdge } from '@difftrail/core';
 import type { Snapshot } from '@difftrail/git';
 import { groupSourcesByConfig } from './contexts.js';
-import { parseSnapshotConfig } from './config.js';
+import { aliasMatches, parseSnapshotConfig } from './config.js';
 import {
   prepareWorkspaces,
   workspaceConsumerManifest,
   workspaceForSpecifier,
 } from './workspaces.js';
 import { externalEvidenceFor, prepareExternalEvidence } from './external.js';
+import { autoImportEdges } from './auto-imports.js';
 import { localReferenceEdges } from './local.js';
 import { analysisGap as gap } from './errors.js';
 import {
@@ -157,13 +158,6 @@ async function cruiseCondition(
     throw gap(snapshot, '<graph>', 'extractor returned an unexpected report');
   return output.output.modules.map((module) => ({ module, condition }));
 }
-function aliasMatches(pattern: string, specifier: string): boolean {
-  const wildcard = pattern.indexOf('*');
-  if (wildcard < 0) return pattern === specifier;
-  const prefix = pattern.slice(0, wildcard);
-  const suffix = pattern.slice(wildcard + 1);
-  return specifier.startsWith(prefix) && specifier.endsWith(suffix);
-}
 /** Extract each snapshot independently with tool-owned parsers; never executes project configuration. */
 export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
   const requiredSpecifiers = await inspectSources(snapshot);
@@ -175,8 +169,12 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
     sources,
     requiredSpecifiers,
   );
+  const autoImports = await autoImportEdges(snapshot);
   if (sources.length === 0)
-    return { revision: snapshot.revision, edges: localEdges };
+    return {
+      revision: snapshot.revision,
+      edges: [...localEdges, ...autoImports],
+    };
   const resolution = await prepareResolution(
     snapshot,
     sources,
@@ -190,6 +188,7 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
     resolution,
   );
   edges.push(...extracted.configurationEdges, ...localEdges);
+  edges.push(...autoImports);
   return { revision: snapshot.revision, edges };
 }
 
