@@ -122,6 +122,8 @@ try {
   for (const [path, contents] of Object.entries({
     'App.vue':
       '<template><Page /></template><script setup>import Page from "./Page.vue";</script>',
+    'Use.vue':
+      '<template><Page /></template><script lang="ts">import Page = require("./Page.vue"); type Shape = import("./shape").Shape;</script>',
     'Page.vue': [
       '<template src="./template.html"></template>',
       '<script src="./logic.js"></script>',
@@ -130,9 +132,10 @@ try {
     'template.html': '<img src="./image.png" />',
     'logic.js': 'export const ready = true;',
     'style.css':
-      '@import "./tokens.css"; .hero { background: url("./image.png") }',
+      '@import "./tokens.css"; .hero { content: "url(\'./not-an-asset.png\')"; background: url("./image.png") }',
     'tokens.css': ':root { --color: red; }',
     'image.png': 'before',
+    'shape.ts': 'export interface Shape { readonly value: number }',
   }))
     await writeFile(join(vueFixture, path), contents);
   run('git', ['add', '--all'], vueFixture);
@@ -141,8 +144,18 @@ try {
   run('git', ['commit', '--quiet', '-am', 'change Vue asset'], vueFixture);
   assert.equal(
     run(bin, [], vueFixture),
-    'App.vue\nPage.vue\nimage.png\nstyle.css\ntemplate.html\n',
+    'App.vue\nPage.vue\nUse.vue\nimage.png\nstyle.css\ntemplate.html\n',
   );
+  await writeFile(
+    join(vueFixture, 'shape.ts'),
+    'export interface Shape { readonly value: string }',
+  );
+  run(
+    'git',
+    ['commit', '--quiet', '-am', 'change Vue imported type'],
+    vueFixture,
+  );
+  assert.equal(run(bin, [], vueFixture), 'Use.vue\nshape.ts\n');
   await writeFile(join(vueFixture, 'Page.vue'), '<template><main></template>');
   run('git', ['commit', '--quiet', '-am', 'invalid Vue template'], vueFixture);
   const invalidVue = spawnSync(

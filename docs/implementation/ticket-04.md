@@ -14,8 +14,10 @@ scriptless components are accepted; malformed SFCs, templates, and script
 blocks produce an analysis gap that identifies the committed file and
 revision.
 
-CSS `@import` and `url(...)` references and static asset attributes on Vue
-templates are resolved relative to the file that contains them. Existing
+CSS `@import` references and actual `url()` function nodes are read from the
+PostCSS value AST; quoted declaration strings that merely contain `url(...)`
+do not create edges. Static asset attributes on Vue templates are resolved
+relative to the file that contains them. Existing
 committed TypeScript path aliases are also honored, with their configuration
 files retained as provenance edges. Required local references must resolve to
 tracked files or analysis fails. Remote URLs, data URLs, and in-document
@@ -27,7 +29,7 @@ bindings fail explicitly. The supported template attributes are `img:src`,
 The CLI package declares exact runtime dependencies for compiler-sfc and
 TypeScript. The executable leaves compiler-sfc external to avoid embedding its
 CommonJS entry point and its optional template-engine lookups; compiler-dom
-and PostCSS are bundled. The package test installs conflicting consumer
+and PostCSS plus the CSS value parser are bundled. The package test installs conflicting consumer
 versions and confirms the packed CLI uses its shipped SFC and TypeScript
 parsers, while a real Vue/CSS Git fixture exercises its bundled template and
 CSS parsers. The fixture confirms that a changed image reaches the owning Vue

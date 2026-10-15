@@ -43,6 +43,40 @@ test('extracts both Vue script blocks and type-only relationships onto their own
   }
 });
 
+test('extracts Vue import-equals and import-type-query relationships', async () => {
+  const repo = await repository({
+    'Widget.ts': 'export class Widget {}',
+    'shape.ts': 'export interface Shape { value: number }',
+    'Page.vue': [
+      '<template><Widget /></template>',
+      '<script lang="ts">import Widget = require("./Widget"); type Shape = import("./shape").Shape;</script>',
+    ].join('\n'),
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(
+        graph.edges
+          .filter((edge) => edge.importer === 'Page.vue')
+          .map((edge) => [
+            edge.importer,
+            edge.specifier,
+            edge.dependency,
+            edge.kind,
+          ])
+          .sort((left, right) => left.join('/').localeCompare(right.join('/'))),
+      ).toEqual(
+        [
+          ['Page.vue', './Widget', 'Widget.ts', 'import-equals'],
+          ['Page.vue', './shape', 'shape.ts', 'type-import'],
+        ].sort((left, right) => left.join('/').localeCompare(right.join('/'))),
+      );
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
 test('tracks Vue block src, template assets, and CSS imports and URLs', async () => {
   const repo = await repository({
     'Page.vue': [
@@ -83,6 +117,28 @@ test('tracks Vue block src, template assets, and CSS imports and URLs', async ()
           ['page.css', './tokens.css', 'tokens.css', 'css-import'],
         ].sort((left, right) => left.join('/').localeCompare(right.join('/'))),
       );
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('does not treat URL-like CSS strings as asset references', async () => {
+  const repo = await repository({
+    'theme.css': `.icon { content: "url('./not-an-asset.png')"; background: url("./image.png"); }`,
+    'image.png': 'fixture',
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(
+        graph.edges.map((edge) => [
+          edge.importer,
+          edge.specifier,
+          edge.dependency,
+          edge.kind,
+        ]),
+      ).toEqual([['theme.css', './image.png', 'image.png', 'css-url']]);
     });
   } finally {
     await repo.cleanup();

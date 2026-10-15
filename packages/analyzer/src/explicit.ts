@@ -8,6 +8,7 @@ import {
 } from '@vue/compiler-dom';
 import { parse as parseSfc } from '@vue/compiler-sfc';
 import postcss from 'postcss';
+import valueParser from 'postcss-value-parser';
 import ts from 'typescript';
 import type { Snapshot } from '@difftrail/git';
 import type { SourceRelationship } from './source.js';
@@ -150,6 +151,18 @@ function scriptNodeRelationships(
       },
     ];
   if (
+    ts.isImportEqualsDeclaration(node) &&
+    ts.isExternalModuleReference(node.moduleReference) &&
+    node.moduleReference.expression &&
+    ts.isStringLiteralLike(node.moduleReference.expression)
+  )
+    return [
+      {
+        specifier: node.moduleReference.expression.text,
+        kind: 'import-equals',
+      },
+    ];
+  if (
     ts.isExportDeclaration(node) &&
     node.moduleSpecifier &&
     ts.isStringLiteralLike(node.moduleSpecifier)
@@ -265,26 +278,48 @@ function inspectCss(source: string): SourceRelationship[] {
   const root = postcss.parse(source);
   const relationships: SourceRelationship[] = [];
   root.walkAtRules('import', (rule) => {
-    const target = rule.params.match(
-      /^\s*(?:url\(\s*(['"]?)([^'")]+)\1\s*\)|(['"])(.*?)\3)/i,
-    );
-    if (target)
+    const specifier = cssImportSpecifier(rule.params);
+    if (specifier)
       relationships.push({
-        specifier: target[2] ?? target[4] ?? '',
+        specifier,
         kind: 'css-import',
       });
   });
   root.walkDecls((declaration) => {
-    const urls = declaration.value.matchAll(
-      /url\(\s*(?:(['"])(.*?)\1|([^'"\s][^)]*?))\s*\)/gi,
-    );
-    for (const match of urls)
-      relationships.push({
-        specifier: (match[2] ?? match[3] ?? '').trim(),
-        kind: 'css-url',
-      });
+    valueParser(declaration.value).walk((node) => {
+      if (node.type !== 'function' || node.value.toLowerCase() !== 'url')
+        return;
+      const specifier = cssUrlSpecifier(node.nodes);
+      if (specifier) relationships.push({ specifier, kind: 'css-url' });
+    });
   });
   return relationships;
+}
+
+function cssImportSpecifier(params: string): string | undefined {
+  const target = valueParser(params).nodes.find(
+    (node) => node.type !== 'space' && node.type !== 'comment',
+  );
+  if (!target) return undefined;
+  if (target.type === 'string') return target.value || undefined;
+  if (target.type === 'function' && target.value.toLowerCase() === 'url')
+    return cssUrlSpecifier(target.nodes);
+  return undefined;
+}
+
+function cssUrlSpecifier(
+  nodes: readonly valueParser.Node[],
+): string | undefined {
+  const argument = nodes.filter(
+    (node) => node.type !== 'space' && node.type !== 'comment',
+  );
+  if (argument.length === 0) return undefined;
+  if (
+    argument.length !== 1 ||
+    (argument[0]?.type !== 'string' && argument[0]?.type !== 'word')
+  )
+    throw new Error('CSS url() requires a static URL');
+  return argument[0].value || undefined;
 }
 
 function errorMessage(error: unknown): string {
