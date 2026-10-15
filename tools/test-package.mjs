@@ -263,7 +263,7 @@ try {
     'generated/components.d.ts\npages/checkout.vue\n',
   );
   const headGap = await commitAutoImport(
-    { 'pages/checkout.vue': '<template><RemoteWidget /></template>' },
+    { 'pages/checkout.vue': '<template><remote-widget /></template>' },
     'introduce a runtime-only auto-import gap',
   );
   const headGapResult = spawnSync(
@@ -273,7 +273,7 @@ try {
   );
   assert.equal(headGapResult.status, 1);
   assert.equal(headGapResult.stdout, '');
-  assert.ok(headGapResult.stderr.includes('RemoteWidget'));
+  assert.ok(headGapResult.stderr.includes('remote-widget'));
   await commitAutoImport(
     { 'pages/checkout.vue': '<template><AutoButton /></template>' },
     'repair the runtime-only auto-import gap',
@@ -286,9 +286,134 @@ try {
   assert.equal(baseGapResult.status, 1);
   assert.equal(baseGapResult.stdout, '');
   assert.ok(
-    baseGapResult.stderr.includes('RemoteWidget'),
+    baseGapResult.stderr.includes('remote-widget'),
     baseGapResult.stderr,
   );
+  const workspaceFixture = join(temporary, 'workspace-export-fixture');
+  await mkdir(workspaceFixture);
+  run('git', ['init', '--quiet'], workspaceFixture);
+  run(
+    'git',
+    ['config', 'user.email', 'fixture@example.invalid'],
+    workspaceFixture,
+  );
+  run('git', ['config', 'user.name', 'Fixture'], workspaceFixture);
+  /** @param {Record<string, string>} files @param {string} message */
+  const commitWorkspace = async (files, message) => {
+    for (const [path, contents] of Object.entries(files)) {
+      await mkdir(join(workspaceFixture, path, '..'), { recursive: true });
+      await writeFile(join(workspaceFixture, path), contents);
+    }
+    run('git', ['add', '--all'], workspaceFixture);
+    run('git', ['commit', '--quiet', '-m', message], workspaceFixture);
+  };
+  await commitWorkspace(
+    {
+      'package.json': JSON.stringify({
+        name: 'workspace-root',
+        private: true,
+        type: 'module',
+        workspaces: ['packages/*', 'apps/*'],
+      }),
+      '.gitignore': 'node_modules/\n',
+      'package-lock.json': JSON.stringify({
+        name: 'workspace-root',
+        lockfileVersion: 3,
+        packages: {
+          '': { name: 'workspace-root', workspaces: ['packages/*', 'apps/*'] },
+          'apps/site': {
+            name: 'site',
+            devDependencies: { 'unplugin-auto-import': '1.0.0' },
+          },
+          'packages/shared': { name: '@demo/shared' },
+          'node_modules/unplugin-auto-import': { version: '1.0.0' },
+        },
+      }),
+      'packages/shared/package.json': JSON.stringify({
+        name: '@demo/shared',
+        type: 'module',
+        exports: {
+          '.': {
+            types: './types/index.d.ts',
+            import: './src/import.js',
+            require: './src/require.cjs',
+          },
+        },
+      }),
+      'packages/shared/types/index.d.ts':
+        'export declare function useShared(): number;',
+      'packages/shared/src/import.js': 'export const useShared = () => 1;',
+      'packages/shared/src/require.cjs': 'exports.useShared = () => 2;',
+      'apps/site/package.json': JSON.stringify({
+        name: 'site',
+        dependencies: { '@demo/shared': 'workspace:*' },
+        devDependencies: { 'unplugin-auto-import': '1.0.0' },
+      }),
+      'node_modules/.package-lock.json': JSON.stringify({
+        name: 'workspace-root',
+        lockfileVersion: 3,
+        packages: {
+          '': { name: 'workspace-root' },
+          'node_modules/unplugin-auto-import': { version: '1.0.0' },
+        },
+      }),
+      'apps/site/vite.config.ts': [
+        "import AutoImport from 'unplugin-auto-import';",
+        "export default AutoImport({ dts: false, imports: [{ '@demo/shared': ['useShared'] }] });",
+      ].join('\n'),
+      'apps/site/src/page.ts': 'export const page = useShared();',
+      'apps/site/src/page.cjs': 'exports.page = useShared();',
+    },
+    'baseline workspace auto-import mapping',
+  );
+  const autoImportPlugin = join(
+    workspaceFixture,
+    'node_modules/unplugin-auto-import',
+  );
+  await mkdir(autoImportPlugin, { recursive: true });
+  await writeFile(
+    join(autoImportPlugin, 'package.json'),
+    JSON.stringify({
+      name: 'unplugin-auto-import',
+      version: '1.0.0',
+      main: 'index.js',
+    }),
+  );
+  await writeFile(
+    join(autoImportPlugin, 'index.js'),
+    'module.exports = () => ({});',
+  );
+  await commitWorkspace(
+    { 'packages/shared/src/import.js': 'export const useShared = () => 3;' },
+    'change the ESM workspace entrypoint',
+  );
+  const toolWorkspace = join(consumer, 'node_modules/@demo/shared');
+  await mkdir(toolWorkspace, { recursive: true });
+  await writeFile(
+    join(toolWorkspace, 'package.json'),
+    JSON.stringify({
+      name: '@demo/shared',
+      type: 'module',
+      exports: { '.': { import: './tool.js', require: './tool.cjs' } },
+    }),
+  );
+  await writeFile(join(toolWorkspace, 'tool.js'), 'export const wrong = true;');
+  await writeFile(join(toolWorkspace, 'tool.cjs'), 'exports.wrong = true;');
+  const workspaceOutput = run(bin, [], workspaceFixture);
+  assert.ok(workspaceOutput.includes('packages/shared/src/import.js'));
+  assert.ok(workspaceOutput.includes('apps/site/src/page.ts'));
+  assert.ok(
+    workspaceOutput.includes('packages/shared/src/require.cjs') === false,
+  );
+  assert.ok(workspaceOutput.includes('tool.js') === false);
+  await commitWorkspace(
+    { 'packages/shared/src/require.cjs': 'exports.useShared = () => 4;' },
+    'change the CommonJS workspace entrypoint',
+  );
+  const requireOutput = run(bin, [], workspaceFixture);
+  assert.ok(requireOutput.includes('packages/shared/src/require.cjs'));
+  assert.ok(requireOutput.includes('apps/site/src/page.cjs'));
+  assert.ok(requireOutput.includes('packages/shared/src/import.js') === false);
   const pnpmConsumer = join(temporary, 'pnpm-consumer');
   await mkdir(pnpmConsumer);
   await writeFile(

@@ -111,13 +111,44 @@ test('fails for a component usage that only an imported runtime resolver could m
       "import Components from 'unplugin-vue-components';",
       'export default Components({ dts: false, resolvers: [name => makeResolution(name)] });',
     ].join('\n'),
-    'pages/page.vue': '<template><RemoteWidget /></template>',
+    'pages/page.vue': '<template><remote-widget /></template>',
   });
   try {
     await withComparison(repo.root, async (comparison) =>
       expect(autoImportEdges(comparison.headSnapshot)).rejects.toThrow(
-        `Analysis gap in pages/page.vue at ${comparison.head}: component RemoteWidget has no committed static auto-import mapping`,
+        `Analysis gap in pages/page.vue at ${comparison.head}: component remote-widget has no committed static auto-import mapping`,
       ),
+    );
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('does not treat Vue native tags or compiler builtins as auto-import gaps', async () => {
+  const repo = await repository({
+    'vite.config.ts': [
+      "import Components from 'unplugin-vue-components';",
+      'export default Components({ dts: false, resolvers: [name => makeResolution(name)] });',
+    ].join('\n'),
+    'pages/page.vue':
+      '<template><main><svg><path /></svg><Transition><div /></Transition><component :is="view" /></main></template>',
+  });
+  try {
+    await withComparison(repo.root, async (comparison) =>
+      expect(await autoImportEdges(comparison.headSnapshot)).toEqual([]),
+    );
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('does not classify custom element tags as auto-imports without a resolver setup', async () => {
+  const repo = await repository({
+    'pages/page.vue': '<template><remote-widget /></template>',
+  });
+  try {
+    await withComparison(repo.root, async (comparison) =>
+      expect(await autoImportEdges(comparison.headSnapshot)).toEqual([]),
     );
   } finally {
     await repo.cleanup();

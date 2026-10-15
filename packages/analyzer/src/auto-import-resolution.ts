@@ -1,8 +1,7 @@
-import { relative, resolve } from 'node:path';
-import { createRequire as createWorkspaceRequire } from 'node:module';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, relative, resolve } from 'node:path';
 import type { DependencyEdge } from '@difftrail/core';
 import type { Snapshot } from '@difftrail/git';
+import enhancedResolve from 'enhanced-resolve';
 import ts from 'typescript';
 import { analysisGap as gap } from './errors.js';
 import { aliasMatches, parseSnapshotConfig } from './config.js';
@@ -15,13 +14,6 @@ import {
 } from './workspaces.js';
 
 export async function resolveMappedDependencies(
-  snapshot: Snapshot,
-  edges: readonly DependencyEdge[],
-): Promise<DependencyEdge[]> {
-  return resolveExternalMappings(snapshot, edges);
-}
-
-async function resolveExternalMappings(
   snapshot: Snapshot,
   edges: readonly DependencyEdge[],
 ): Promise<DependencyEdge[]> {
@@ -165,6 +157,7 @@ async function resolveWorkspaceMapping(
 ): Promise<DependencyEdge[]> {
   try {
     const resolved = resolveWorkspaceEntry(
+      snapshot,
       resolve(snapshot.directory, edge.importer),
       edge.dependency,
     );
@@ -204,20 +197,32 @@ async function resolveWorkspaceMapping(
   }
 }
 
-function resolveWorkspaceEntry(importer: string, specifier: string): string {
-  if (/\.[cm]?js$/.test(importer)) {
-    try {
-      return createWorkspaceRequire(importer).resolve(specifier);
-    } catch {
-      return '';
-    }
-  }
+function resolveWorkspaceEntry(
+  snapshot: Snapshot,
+  importer: string,
+  specifier: string,
+): string {
   try {
-    const resolveFrom = import.meta.resolve as unknown as (
-      request: string,
-      parentUrl: string,
-    ) => string;
-    return fileURLToPath(resolveFrom(specifier, pathToFileURL(importer).href));
+    const condition = /\.(?:cjs|cts)$/.test(importer) ? 'require' : 'import';
+    const resolveFrom = enhancedResolve.create.sync({
+      conditionNames: [condition, 'node', 'default'],
+      exportsFields: ['exports'],
+      extensions: [
+        '.mjs',
+        '.js',
+        '.cjs',
+        '.mts',
+        '.ts',
+        '.cts',
+        '.json',
+        '.vue',
+      ],
+    });
+    const resolved = resolveFrom(
+      resolve(snapshot.directory, dirname(importer)),
+      specifier,
+    );
+    return resolved || '';
   } catch {
     return '';
   }

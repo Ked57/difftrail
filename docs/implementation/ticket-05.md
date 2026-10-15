@@ -22,11 +22,13 @@ identifies a free reference to a generated declaration; parameters and local
 bindings are not mistaken for auto-imports. Relative identities must resolve
 to exactly one tracked source file in that endpoint. Static TypeScript path
 aliases use the importer's effective inherited config and retain every config
-file read. Workspace package identities use the package's import or require
-export condition and retain workspace membership, package, and consuming
-manifest edges. External package identities require matching endpoint manifest,
-lockfile, and installed package evidence and remain terminal package
-dependencies. Same-basename files do not participate in resolution.
+file read. Workspace package identities use the import or require export
+condition through a static resolver rooted at that endpoint's consumer
+directory. Tool-install paths do not participate. The graph retains workspace
+membership, package, and consuming manifest edges. External package identities
+require matching endpoint manifest, lockfile, and installed package evidence
+and remain terminal package dependencies. Same-basename files do not
+participate in resolution.
 
 Each consumer links to the exact generated metadata and plugin config that
 supplied its identity. A changed declaration, config, alias, workspace
@@ -37,7 +39,10 @@ identities, unsupported dynamic mapping, or runtime-only component use produces
 an actionable analysis gap at the consuming file and revision. A component
 plugin with `dts: false` or a runtime resolver is accepted only when the
 committed static mapping supplies the used component. Projects without a
-recognized auto-import setup remain unaffected.
+recognized auto-import setup remain unaffected. Missing component candidates
+follow Vue's native-tag and built-in component semantics; only non-native,
+non-built-in tags under an applicable component resolver require a static
+mapping.
 
 The parser has four approved seams. The endpoint selector supplies the exact
 committed snapshots, but does not test parser behavior or output bytes. The
@@ -51,9 +56,9 @@ browser behavior or exercise every application integration.
 ## Verification
 
 `pnpm verify:full` passed unchanged: formatting, ESLint and complexity audit,
-TypeScript, 44 unit tests, 30 CLI integration tests, isolated npm and strict
+TypeScript, 46 unit tests, 30 CLI integration tests, isolated npm and strict
 pnpm packed-package installation and CLI checks, and knip. The focused analyzer
-suite also passed 27 tests with global coverage thresholds disabled for
+suite also passed 15 tests with global coverage thresholds disabled for
 diagnosis; this filtered run is supplementary and does not replace the full
 gate.
 
@@ -61,6 +66,9 @@ The focused analyzer suite covers static component and script APIs, external
 package evidence, workspace export conditions, inherited aliases, local
 shadowing, same-basename exclusion, historical mapping-only changes, exact
 configured metadata paths, missing/runtime-only mappings, dynamic config
-gaps, and conflicting mappings. The packed CLI fixture checks mapping-only
-consumer selection and no-partial-output failures at base and head. Manual QA
-of the CLI is assigned to the separate QA job.
+gaps, Vue native and built-in tags, and conflicting mappings. The packed CLI
+fixture checks mapping-only consumer selection, snapshot-rooted ESM and
+CommonJS workspace export branches despite a conflicting package beside the
+installed CLI, and no-partial-output kebab-case component failures at base and
+head. Manual QA
+of the CLI remains with the separate QA job.

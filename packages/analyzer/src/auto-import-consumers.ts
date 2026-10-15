@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import type { DependencyEdge } from '@difftrail/core';
 import type { Snapshot } from '@difftrail/git';
+import { isCoreComponent, parserOptions } from '@vue/compiler-dom';
 import { parse as parseSfc } from '@vue/compiler-sfc';
 import ts from 'typescript';
 import { analysisGap as gap } from './errors.js';
@@ -60,7 +61,7 @@ function missingComponentMapping(
 ): string | undefined {
   if (
     mapped.length ||
-    !/[A-Z]/.test(tag) ||
+    isNativeOrBuiltInTag(tag) ||
     !configApplies(path, collection.runtimeComponentConfigs)
   )
     return undefined;
@@ -70,6 +71,15 @@ function missingComponentMapping(
   return missing
     ? `component ${tag} requires generated metadata ${missing[1]} configured by ${missing[0]}, but that committed file is missing`
     : `component ${tag} has no committed static auto-import mapping`;
+}
+
+function isNativeOrBuiltInTag(tag: string): boolean {
+  return Boolean(
+    parserOptions.isNativeTag?.(tag) ||
+    parserOptions.isBuiltInComponent?.(tag) ||
+    isCoreComponent(tag) ||
+    tag.toLowerCase() === 'component',
+  );
 }
 
 function localScriptNames(

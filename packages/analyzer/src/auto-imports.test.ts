@@ -217,6 +217,7 @@ test('resolves direct workspace API mappings through committed package exports',
       "export default AutoImport({ dts: false, imports: [{ '@demo/shared': ['useShared'] }] });",
     ].join('\n'),
     'apps/site/src/page.ts': 'export const page = useShared();',
+    'apps/site/src/page.cjs': 'exports.page = useShared();',
   });
   try {
     await withComparison(repo.root, async (comparison) => {
@@ -226,6 +227,11 @@ test('resolves direct workspace API mappings through committed package exports',
           expect.objectContaining({
             importer: 'apps/site/src/page.ts',
             dependency: 'packages/shared/src/index.js',
+            kind: 'auto-import',
+          }),
+          expect.objectContaining({
+            importer: 'apps/site/src/page.cjs',
+            dependency: 'packages/shared/src/index.cjs',
             kind: 'auto-import',
           }),
           expect.objectContaining({
