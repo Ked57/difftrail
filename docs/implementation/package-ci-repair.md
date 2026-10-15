@@ -40,7 +40,7 @@ Commands and observed results on macOS, Node `v22.23.1`, at base commit
 | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `gh pr checks 21 --repo Ked57/difftrail --watch=false`                             | Confirmed both quality jobs failed.                                                                                                                 |
 | `gh run view 38745046957 --repo Ked57/difftrail --log-failed`                      | Reproduced the `ERR_PNPM_NO_OFFLINE_META` failure in the Ubuntu push run.                                                                           |
-| `gh run view 38745054034 --repo Ked57/difftrail --log-failed`                      | Reproduced the same failure in the Ubuntu pull-request run.                                                                                        |
+| `gh run view 38745054034 --repo Ked57/difftrail --log-failed`                      | Reproduced the same failure in the Ubuntu pull-request run.                                                                                         |
 | `npm_config_store_dir=/private/tmp/difftrail-pnpm-cold-20261015 pnpm test:package` | Passed using a fresh pnpm store; pnpm resolved the missing metadata and the packed CLI, alias, and parser assertions passed.                        |
 | `pnpm verify:full`                                                                 | Passed formatting, lint and difficulty audit, typecheck, 22 unit tests, build, 30 CLI integration tests, packed npm/pnpm consumer checks, and Knip. |
 
