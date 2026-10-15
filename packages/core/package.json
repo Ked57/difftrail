@@ -1,0 +1,11 @@
+{
+  "name": "@difftrail/core",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "build": "esbuild src/index.ts --outdir=dist --platform=node --format=esm --packages=external"
+  },
+  "dependencies": {}
+}

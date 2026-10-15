@@ -1,0 +1,7 @@
+pnpm-lock.yaml
+coverage/
+reports/
+.turbo/
+.stryker-tmp/
+**/dist/
+docs/plans/

@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "@difftrail/core": ["./packages/core/src/index.ts"],
+      "@difftrail/git": ["./packages/git/src/index.ts"],
+      "@difftrail/analyzer": ["./packages/analyzer/src/index.ts"]
+    },
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": [
+    "packages/**/*.ts",
+    "tests/**/*.ts",
+    "*.config.ts",
+    "tools/**/*.mjs",
+    "packages/**/*.mjs"
+  ]
+}
