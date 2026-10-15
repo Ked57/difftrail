@@ -1,0 +1,28 @@
+@import '../styles/tokens.css';
+
+.greeting-card {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: #fff url('../assets/card-texture.svg') center / cover;
+  box-shadow: 0 10px 30px #1823330c;
+}
+
+.greeting-card h2 {
+  margin: 0.2rem 0;
+  font-size: 1.5rem;
+}
+.greeting-card p {
+  margin: 0;
+  color: var(--muted);
+}
+.greeting-card .eyebrow {
+  color: #176447;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@shared/*": ["./../../packages/example-shared/src/*"],
+      "@models": ["./src/types/index.ts"],
+      "@models/*": ["./src/types/*"]
+    },
+    "allowJs": true,
+    "checkJs": false,
+    "jsx": "preserve"
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.js", "components.d.ts"]
+}
