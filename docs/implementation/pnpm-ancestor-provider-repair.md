@@ -28,6 +28,14 @@ nearest manifest. Existing committed-versus-installed lock checks and history
 endpoint checks remain strict. Difftrail does not install packages, fetch from
 registries, or run project scripts.
 
+Package-based TypeScript `extends` clauses are statically read from committed
+JSONC configuration chains before the TypeScript config parser runs. Their
+package requests use the same ancestor provider validation. Config parsing may
+read files only beneath those validated installed package roots; other
+untracked files remain unavailable. The source receives metadata edges to the
+provider manifest and lock, and configuration edges to the tracked config files
+that compose the chain.
+
 ## Regression seams
 
 The analyzer fixture proves a root-only dependency for a nested source and
@@ -45,6 +53,12 @@ nearest-declared package identity. That last case uses a source-only history
 change after install so both history endpoints share the same committed
 manifest and lock; this isolates importer identity validation without relaxing
 the independent historical lock comparison.
+
+A second CLI fixture performs a standard frozen pnpm install with root-only
+`@tsconfig/node22`. Its app config inherits a tracked root config, while the
+source imports only a builtin and a local file. It checks successful parsing,
+missing provider-link rejection, and wrong installed config-package identity,
+including source, tracked config, provider manifest, lock, and revision context.
 
 ## Limits
 

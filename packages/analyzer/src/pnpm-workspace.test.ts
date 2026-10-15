@@ -390,3 +390,112 @@ test('does not borrow a pnpm ancestor version when the consumer declares the dep
     await repo.cleanup();
   }
 });
+
+async function inheritedConfigProviderRepository() {
+  const lock = [
+    'lockfileVersion: 9.0',
+    'settings: {}',
+    'importers:',
+    '  .:',
+    '    devDependencies:',
+    '      "@tsconfig/node22":',
+    '        specifier: 22.0.2',
+    '        version: 22.0.2',
+    '  apps/first: {}',
+    'packages:',
+    '  "@tsconfig/node22@22.0.2":',
+    '    resolution: {integrity: sha512-config}',
+    'snapshots:',
+    '  "@tsconfig/node22@22.0.2": {}',
+  ].join('\n');
+  const repo = await repository({
+    '.gitignore': 'node_modules/\n',
+    'package.json': JSON.stringify({
+      name: 'pnpm-config-provider',
+      private: true,
+      devDependencies: { '@tsconfig/node22': '22.0.2' },
+    }),
+    'pnpm-workspace.yaml': 'packages:\n  - apps/*\n',
+    'pnpm-lock.yaml': lock,
+    'tsconfig.base.json': JSON.stringify({
+      extends: '@tsconfig/node22/tsconfig.json',
+      compilerOptions: { moduleResolution: 'NodeNext', strict: true },
+    }),
+    'apps/first/package.json': JSON.stringify({ name: 'first-app' }),
+    'apps/first/tsconfig.json': JSON.stringify({
+      extends: '../../tsconfig.base.json',
+      include: ['src/**/*.ts'],
+    }),
+    'apps/first/src/leaf.ts': 'export const leaf = 1;',
+    'apps/first/src/consumer.ts':
+      "import {readFile} from 'node:fs'; import {leaf} from './leaf'; export const value = readFile && leaf;",
+  });
+  const packageRoot = join(
+    repo.root,
+    'node_modules/.pnpm/@tsconfig+node22@22.0.2/node_modules/@tsconfig/node22',
+  );
+  const packageLink = join(repo.root, 'node_modules/@tsconfig/node22');
+  await mkdir(packageRoot, { recursive: true });
+  await writeFile(
+    join(packageRoot, 'package.json'),
+    JSON.stringify({ name: '@tsconfig/node22', version: '22.0.2' }),
+  );
+  await writeFile(
+    join(packageRoot, 'tsconfig.json'),
+    JSON.stringify({ compilerOptions: { target: 'ES2022', strict: true } }),
+  );
+  await mkdir(join(repo.root, 'node_modules/.pnpm'), { recursive: true });
+  await mkdir(join(repo.root, 'node_modules/@tsconfig'), {
+    recursive: true,
+  });
+  await symlink(packageRoot, packageLink, 'dir');
+  await writeFile(
+    join(repo.root, 'node_modules/.modules.yaml'),
+    'virtualStoreDir: .pnpm\n',
+  );
+  await writeFile(join(repo.root, 'node_modules/.pnpm/lock.yaml'), lock);
+  return { repo, packageRoot, packageLink };
+}
+
+test('resolves inherited package tsconfig through validated ancestor evidence', async () => {
+  const { repo, packageRoot, packageLink } =
+    await inheritedConfigProviderRepository();
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(
+        graph.edges
+          .filter((edge) => edge.importer === 'apps/first/src/consumer.ts')
+          .map((edge) => [edge.kind, edge.dependency])
+          .sort((left, right) => left.join('/').localeCompare(right.join('/'))),
+      ).toEqual(
+        [
+          ['configuration', 'apps/first/tsconfig.json'],
+          ['configuration', 'package.json'],
+          ['configuration', 'tsconfig.base.json'],
+          ['import', 'apps/first/src/leaf.ts'],
+          ['metadata', 'package.json'],
+          ['metadata', 'pnpm-lock.yaml'],
+        ].sort((left, right) => left.join('/').localeCompare(right.join('/'))),
+      );
+    });
+    await rm(packageLink);
+    await withComparison(repo.root, async (comparison) =>
+      expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
+        /Analysis gap in apps\/first\/src\/consumer\.ts at .*tsconfig\.base\.json extends @tsconfig\/node22\/tsconfig\.json: .*package\.json.*node_modules\/@tsconfig\/node22\/package\.json/,
+      ),
+    );
+    await symlink(packageRoot, packageLink, 'dir');
+    await writeFile(
+      join(packageRoot, 'package.json'),
+      JSON.stringify({ name: '@tsconfig/node22', version: '99.0.0' }),
+    );
+    await withComparison(repo.root, async (comparison) =>
+      expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
+        /Analysis gap in apps\/first\/src\/consumer\.ts at .*tsconfig\.base\.json extends @tsconfig\/node22\/tsconfig\.json: .*installed package identity for @tsconfig\/node22 does not match pnpm-lock\.yaml/,
+      ),
+    );
+  } finally {
+    await repo.cleanup();
+  }
+});

@@ -321,3 +321,96 @@ test('built CLI resolves root-only pnpm providers and rejects invalid ancestor e
     await repo.cleanup();
   }
 });
+
+async function inheritedConfigProviderFixture() {
+  return repository({
+    '.gitignore': 'node_modules/\n',
+    'package.json': JSON.stringify({
+      name: 'pnpm-inherited-config-fixture',
+      private: true,
+      packageManager: 'pnpm@10.34.7',
+      devDependencies: { '@tsconfig/node22': '22.0.2' },
+    }),
+    'pnpm-workspace.yaml': 'packages:\n  - packages/*\n',
+    'tsconfig.base.json': JSON.stringify({
+      extends: '@tsconfig/node22/tsconfig.json',
+      compilerOptions: { moduleResolution: 'NodeNext', strict: true },
+    }),
+    'packages/app/package.json': JSON.stringify({ name: 'config-app' }),
+    'packages/app/tsconfig.json': JSON.stringify({
+      extends: '../../tsconfig.base.json',
+      include: ['src/**/*.ts'],
+    }),
+    'packages/app/src/leaf.ts': 'export const leaf = 1;',
+    'packages/app/src/consumer.ts':
+      "import {readFile} from 'node:fs'; import {leaf} from './leaf'; export const value = readFile && leaf;",
+  });
+}
+
+async function installInheritedConfigProvider(
+  repo: Awaited<ReturnType<typeof repository>>,
+): Promise<void> {
+  const lock = pnpmCommand(repo.root, [
+    'install',
+    '--lockfile-only',
+    '--ignore-scripts',
+    '--prefer-offline',
+  ]);
+  expect(lock.status, `${lock.stdout}\n${lock.stderr}`).toBe(0);
+  await repo.commit({
+    'pnpm-lock.yaml': await readFile(join(repo.root, 'pnpm-lock.yaml'), 'utf8'),
+  });
+  const install = pnpmCommand(repo.root, [
+    'install',
+    '--frozen-lockfile',
+    '--ignore-scripts',
+    '--prefer-offline',
+  ]);
+  expect(install.status, `${install.stdout}\n${install.stderr}`).toBe(0);
+}
+
+test('built CLI bootstraps inherited package tsconfig from normal pnpm provider evidence', async () => {
+  const repo = await inheritedConfigProviderFixture();
+  const configLink = join(repo.root, 'node_modules/@tsconfig/node22');
+  try {
+    await installInheritedConfigProvider(repo);
+    await expect(lstat(configLink)).resolves.toBeDefined();
+    await expect(
+      lstat(join(repo.root, 'packages/app/node_modules/@tsconfig/node22')),
+    ).rejects.toThrow();
+    await repo.commit({
+      'packages/app/src/consumer.ts':
+        "import {readFile} from 'node:fs'; import {leaf} from './leaf'; export const value = readFile ? leaf + 1 : leaf;",
+    });
+    const result = runCli(repo.root);
+    expect(result).toMatchObject({
+      status: 0,
+      stdout: 'packages/app/src/consumer.ts\n',
+      stderr: '',
+    });
+
+    const configPackage = await realpath(configLink);
+    await rm(configLink);
+    expectCliGap(
+      repo.root,
+      'Analysis gap in packages/app/src/consumer.ts at',
+      'tsconfig.base.json extends @tsconfig/node22/tsconfig.json',
+      'package.json',
+      'node_modules/@tsconfig/node22/package.json',
+    );
+    await symlink(configPackage, configLink, 'dir');
+
+    await writeFile(
+      join(configPackage, 'package.json'),
+      JSON.stringify({ name: '@tsconfig/node22', version: '99.0.0' }),
+    );
+    expectCliGap(
+      repo.root,
+      'Analysis gap in packages/app/src/consumer.ts at',
+      'tsconfig.base.json extends @tsconfig/node22/tsconfig.json',
+      'installed package identity for @tsconfig/node22 does not match pnpm-lock.yaml',
+    );
+  } finally {
+    await repo.cleanup();
+  }
+});

@@ -19,6 +19,7 @@ export async function localReferenceEdges(
   snapshot: Snapshot,
   sources: readonly string[],
   inspections: ReadonlyMap<string, SourceInspection>,
+  configRootsBySource: ReadonlyMap<string, readonly string[]> = new Map(),
 ): Promise<DependencyEdge[]> {
   const tracked = new Set(snapshot.paths);
   const aliasSources = [
@@ -27,7 +28,7 @@ export async function localReferenceEdges(
       .filter(([, inspection]) => inspection.localReferences.length > 0)
       .map(([file]) => file),
   ];
-  const aliases = aliasRules(snapshot, aliasSources);
+  const aliases = aliasRules(snapshot, aliasSources, configRootsBySource);
   const edges: DependencyEdge[] = [];
   const configurationEdges = new Set<string>();
   for (const [importer, inspection] of inspections) {
@@ -147,11 +148,23 @@ async function externalTemplateEdges(
 function aliasRules(
   snapshot: Snapshot,
   sources: readonly string[],
+  configRootsBySource: ReadonlyMap<string, readonly string[]>,
 ): Map<string, AliasRule[]> {
   const result = new Map<string, AliasRule[]>();
   for (const group of groupSourcesByConfig(snapshot, sources)) {
     if (!group.configPath) continue;
-    const config = parseSnapshotConfig(snapshot, group.configPath);
+    const externalPackageRoots = [
+      ...new Set(
+        group.sources.flatMap(
+          (source) => configRootsBySource.get(source) ?? [],
+        ),
+      ),
+    ];
+    const config = parseSnapshotConfig(
+      snapshot,
+      group.configPath,
+      externalPackageRoots,
+    );
     const configuredBase = config.parsed.options.pathsBasePath;
     const base =
       typeof configuredBase === 'string'
