@@ -14,7 +14,17 @@ Snapshot materialization remains isolated in a temporary directory removed in `f
 
 The approved subprocess seam uses actual temporary Git repositories with literal expected results. Added scenarios cover a genuine root, a first-parent merge, direct endpoint net differences including a full revert, explicit merge-base, deletion, rename, shallow default history failure, valid explicit endpoints available in a shallow clone, invalid refs and invalid flag combinations. The dirty-checkout scenario now combines a modified file, staged file, and untracked file, and checks that the index tree, refs, local Git configuration, and worktree status are unchanged.
 
-`pnpm verify:full` passes: formatting, ESLint and the mandatory Difficulty audit, strict typecheck, all nine unit tests, the 23 built-CLI real-Git integration cases, isolated tarball install/executable/parser smoke, and Knip. Snapshot cleanup success/failure is additionally covered by the existing real-source analyzer fixture. The executed environment was macOS arm64 with Node 22.23.1 and pnpm 10.34.7. No browser/app surface changed. Review and manual CLI QA remain pending in their separate jobs; this handoff does not claim either.
+`pnpm verify:full` passes: formatting, ESLint and the mandatory Difficulty audit, strict typecheck, all nine unit tests, the 26 built-CLI real-Git integration cases, isolated tarball install/executable/parser smoke, and Knip. Snapshot cleanup success/failure is covered by the existing real-source analyzer fixture and the new Git blob-read failure CLI scenario. The executed environment was macOS arm64 with Node 22.23.1 and pnpm 10.34.7. No browser/app surface changed. Review and manual CLI QA are separate jobs; this handoff does not claim QA observations.
+
+## Review repair
+
+The independent standards review had no findings. The specification review requested actual CLI histories for cycles and a cross-endpoint path trap, an operational Git-failure cleanup check, exact worktree file preservation, and more useful invalid-revision diagnostics.
+
+The new endpoint fixture changes package entry points between snapshots: the base graph reaches `bridge.js` from `package-a/old.js`, while the head graph reaches `consumer.js` from `bridge.js`. Independent traversal returns the literal expected paths without `consumer.js`. A temporary mutation that traversed the union of both endpoint edge sets failed this CLI test by adding `consumer.js`; the production selector was restored and the test passed. Ticket 03 will add actual configuration-consumer edges, so its later contract may legitimately change this fixture's expected selection.
+
+Additional real-Git checks cover a source dependency cycle, removal of a committed loose blob during head snapshot materialization with no leaked `difftrail-snapshots-*` directory, and byte-for-byte before/after reads of the modified tracked, staged, and untracked fixture files. Invalid base and head refs now appear in stderr with their role, Git's cause, and an available-commit/history hint; both cases retain status 1 and zero stdout. The new CLI history/cleanup/preservation and diagnostic regressions pass in the 26-case integration suite.
+
+This repair changes CLI runtime behavior for invalid-reference diagnostics. The rebuilt `packages/cli/dist/cli.js` SHA-256 is `18f728a1ed69c15209e1b1ba9d45a02e16aaf85bcaef244af86ca27bb68c907e`, so the manual-QA job should retest base/head invalid references and adjacent success/state-preservation paths on the repaired artifact. Those QA observations are pending and are not claimed here.
 
 ## Scope boundary
 

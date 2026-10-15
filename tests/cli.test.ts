@@ -1,5 +1,13 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
@@ -10,6 +18,17 @@ function cli(cwd: string, ...args: string[]) {
     cwd,
     encoding: 'utf8',
   });
+}
+async function snapshotDirectories(): Promise<string[]> {
+  return (await readdir(tmpdir()))
+    .filter((name) => name.startsWith('difftrail-snapshots-'))
+    .sort();
+}
+async function readFiles(
+  root: string,
+  paths: readonly string[],
+): Promise<Buffer[]> {
+  return Promise.all(paths.map((path) => readFile(resolve(root, path))));
 }
 test('built CLI returns exact latest-commit consumers as text and JSON from dirty checkout', async () => {
   const repo = await repository({
@@ -35,6 +54,11 @@ test('built CLI returns exact latest-commit consumers as text and JSON from dirt
     const index = repo.git('write-tree');
     const refs = repo.git('show-ref');
     const config = repo.git('config', '--local', '--list');
+    const filesBefore = await readFiles(repo.root, [
+      'leaf.js',
+      'independent.js',
+      'untracked.js',
+    ]);
     const result = cli(repo.root);
     expect({
       status: result.status,
@@ -57,6 +81,9 @@ test('built CLI returns exact latest-commit consumers as text and JSON from dirt
     expect(repo.git('write-tree')).toBe(index);
     expect(repo.git('show-ref')).toBe(refs);
     expect(repo.git('config', '--local', '--list')).toBe(config);
+    expect(
+      await readFiles(repo.root, ['leaf.js', 'independent.js', 'untracked.js']),
+    ).toEqual(filesBefore);
   } finally {
     await repo.cleanup();
   }
@@ -211,6 +238,64 @@ test('built CLI uses an explicit merge base only when requested', async () => {
   }
 });
 
+test('built CLI traverses a real cyclic dependency history once per file', async () => {
+  const repo = await repository({
+    'a.js': "import './b.js'; export const a=1;",
+    'b.js': "import './a.js'; export const b=1;",
+  });
+  try {
+    await repo.commit({ 'a.js': "import './b.js'; export const a=2;" });
+    expect(cli(repo.root).stdout).toBe('a.js\nb.js\n');
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI keeps historical and current package-resolution chains independent', async () => {
+  const repo = await repository({
+    'bridge.js': "export {value} from './package-a';",
+    'consumer.js': "export {value} from './package-b';",
+    'package-a/package.json': '{"main":"old.js"}',
+    'package-a/old.js': 'export const value=1;',
+    'package-a/new.js': 'export const value=1;',
+    'package-b/package.json': '{"main":"other.js"}',
+    'package-b/other.js': 'export const value=1;',
+  });
+  try {
+    const base = repo.git('rev-parse', 'HEAD');
+    const head = await repo.commit({
+      'package-a/old.js': 'export const value=2;',
+      'package-a/package.json': '{"main":"new.js"}',
+      'package-b/package.json': '{"main":"../bridge.js"}',
+    });
+    const result = cli(repo.root, '--base', base, '--head', head, '--json');
+    expect({
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    }).toEqual({
+      status: 0,
+      stdout:
+        JSON.stringify({
+          root: await realpath(repo.root),
+          base,
+          head,
+          scope: 'static',
+          files: [
+            'bridge.js',
+            'package-a/old.js',
+            'package-a/package.json',
+            'package-b/package.json',
+          ],
+          removed: [],
+        }) + '\n',
+      stderr: '',
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
 test('built CLI rejects unavailable default history but accepts explicit shallow endpoints', async () => {
   const repo = await repository({ 'value.js': 'export const value=1;' });
   const clone = await mkdtemp(join(tmpdir(), 'difftrail-shallow-'));
@@ -242,6 +327,30 @@ test('built CLI rejects unavailable default history but accepts explicit shallow
   }
 });
 
+test('built CLI cleans snapshot directories after a Git blob read failure', async () => {
+  const repo = await repository({ 'damaged.js': 'export const value=1;' });
+  try {
+    const head = await repo.commit({ 'damaged.js': 'export const value=2;' });
+    const object = repo.git('rev-parse', `${head}:damaged.js`);
+    const looseObject = resolve(
+      repo.root,
+      '.git',
+      'objects',
+      object.slice(0, 2),
+      object.slice(2),
+    );
+    const snapshotsBefore = await snapshotDirectories();
+    await unlink(looseObject);
+    const result = cli(repo.root, '--json');
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('Git cat-file failed');
+    expect(await snapshotDirectories()).toEqual(snapshotsBefore);
+  } finally {
+    await repo.cleanup();
+  }
+});
+
 test('built CLI validates comparison flag combinations and unresolved refs atomically', async () => {
   const repo = await repository({ 'only.js': 'export const value=1;' });
   try {
@@ -258,6 +367,18 @@ test('built CLI validates comparison flag combinations and unresolved refs atomi
     const unavailable = cli(repo.root, '--base', 'no-such-ref', '--json');
     expect(unavailable.status).toBe(1);
     expect(unavailable.stdout).toBe('');
+    expect(unavailable.stderr).toContain('no-such-ref');
+    expect(unavailable.stderr).toContain('available commit');
+    const missingHead = cli(
+      repo.root,
+      '--base',
+      'HEAD',
+      '--head',
+      'no-such-head',
+    );
+    expect(missingHead.status).toBe(1);
+    expect(missingHead.stdout).toBe('');
+    expect(missingHead.stderr).toContain('no-such-head');
   } finally {
     await repo.cleanup();
   }

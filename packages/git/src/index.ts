@@ -77,44 +77,50 @@ async function materialize(
   }
   return { revision, directory, paths };
 }
-async function resolveCommit(root: string, revision: string): Promise<string> {
-  return (
-    await git(root, [
-      'rev-parse',
-      '--verify',
-      '--end-of-options',
-      `${revision}^{commit}`,
-    ])
-  )
-    .toString()
-    .trim();
+async function resolveCommit(
+  root: string,
+  revision: string,
+  purpose: string,
+): Promise<string> {
+  try {
+    return (
+      await git(root, [
+        'rev-parse',
+        '--verify',
+        '--end-of-options',
+        `${revision}^{commit}`,
+      ])
+    )
+      .toString()
+      .trim();
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Cannot resolve ${purpose} revision ${JSON.stringify(revision)}: ${cause}. Check that it names an available commit and required history is present.`,
+      { cause: error },
+    );
+  }
 }
 async function firstParent(root: string, head: string): Promise<string | null> {
   const commit = (await git(root, ['cat-file', '-p', head])).toString();
   const parent = /^parent ([0-9a-f]+)$/m.exec(commit)?.[1];
   if (!parent) return null;
-  try {
-    return await resolveCommit(root, parent);
-  } catch {
-    throw new Error(
-      `Cannot resolve required first parent ${parent} of ${head}.`,
-    );
-  }
+  return resolveCommit(root, parent, 'first parent');
 }
 async function selectEndpoints(
   root: string,
   options: ComparisonOptions,
 ): Promise<{ base: string | null; head: string }> {
   if (options.base === undefined) {
-    const head = await resolveCommit(root, 'HEAD');
+    const head = await resolveCommit(root, 'HEAD', 'HEAD');
     return { base: await firstParent(root, head), head };
   }
-  const head = await resolveCommit(root, options.head ?? 'HEAD');
-  const requestedBase = await resolveCommit(root, options.base);
+  const head = await resolveCommit(root, options.head ?? 'HEAD', 'head');
+  const requestedBase = await resolveCommit(root, options.base, 'base');
   const base = options.mergeBase
     ? (await git(root, ['merge-base', requestedBase, head])).toString().trim()
     : requestedBase;
-  return { base: await resolveCommit(root, base), head };
+  return { base: await resolveCommit(root, base, 'merge-base'), head };
 }
 async function changedPaths(
   root: string,
