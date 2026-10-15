@@ -430,6 +430,12 @@ test.each([
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain('broken.js');
     expect(result.stderr).toContain(base);
+    if (_name === 'missing import') {
+      const filtered = cli(repo.root, '--json', '--filter', 'never-matches');
+      expect(filtered.status).toBe(1);
+      expect(filtered.stdout).toBe('');
+      expect(filtered.stderr).toContain('broken.js');
+    }
   } finally {
     await repo.cleanup();
   }
