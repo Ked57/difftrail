@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { expect, test } from 'vitest';
 import { repository } from './helpers.js';
@@ -71,6 +79,117 @@ test('built CLI resolves workspace devDependencies from matching npm install met
       stdout: 'packages/app/consumer.js\n',
       stderr: '',
     });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+async function pnpmWorkspaceFixture() {
+  return repository({
+    '.gitignore': 'node_modules/\n',
+    'package.json': JSON.stringify({
+      name: 'pnpm-workspace-fixture',
+      private: true,
+      packageManager: 'pnpm@10.34.7',
+    }),
+    'pnpm-workspace.yaml': 'packages:\n  - apps/*\n',
+    'apps/first/package.json': JSON.stringify({
+      name: 'first-app',
+      dependencies: { chalk: '4.1.2' },
+    }),
+    'apps/first/consumer.js':
+      "import chalk from 'chalk'; export const color = chalk.green('first');",
+    'apps/second/package.json': JSON.stringify({
+      name: 'second-app',
+      dependencies: { chalk: '5.6.2' },
+    }),
+    'apps/second/consumer.js':
+      "import chalk from 'chalk'; export const color = chalk.green('second');",
+    'apps/alias/package.json': JSON.stringify({
+      name: 'alias-app',
+      dependencies: { 'chalk-legacy': 'npm:chalk@4.1.2' },
+    }),
+    'apps/alias/consumer.js':
+      "import chalk from 'chalk-legacy'; export const color = chalk.green('alias');",
+  });
+}
+
+function pnpmCommand(root: string, args: readonly string[]) {
+  return spawnSync('pnpm', [...args], { cwd: root, encoding: 'utf8' });
+}
+
+async function installPnpmWorkspace(
+  repo: Awaited<ReturnType<typeof repository>>,
+) {
+  const lock = pnpmCommand(repo.root, [
+    'install',
+    '--lockfile-only',
+    '--ignore-scripts',
+    '--prefer-offline',
+  ]);
+  expect(lock.status, `${lock.stdout}\n${lock.stderr}`).toBe(0);
+  await repo.commit({
+    'pnpm-lock.yaml': await readFile(join(repo.root, 'pnpm-lock.yaml'), 'utf8'),
+  });
+  const install = pnpmCommand(repo.root, [
+    'install',
+    '--frozen-lockfile',
+    '--ignore-scripts',
+    '--prefer-offline',
+  ]);
+  expect(install.status, `${install.stdout}\n${install.stderr}`).toBe(0);
+  await expect(lstat(join(repo.root, 'node_modules/chalk'))).rejects.toThrow();
+  await expect(
+    lstat(join(repo.root, 'apps/first/node_modules/chalk')),
+  ).resolves.toBeDefined();
+  await expect(
+    lstat(join(repo.root, 'apps/second/node_modules/chalk')),
+  ).resolves.toBeDefined();
+  await expect(
+    lstat(join(repo.root, 'apps/alias/node_modules/chalk-legacy')),
+  ).resolves.toBeDefined();
+}
+
+function runCli(root: string) {
+  return spawnSync(process.execPath, [executable], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+}
+
+async function pointAliasAtWrongVersion(root: string): Promise<void> {
+  const secondPackage = join(root, 'apps/second/node_modules/chalk');
+  const firstPackage = join(root, 'apps/first/node_modules/chalk');
+  await rm(secondPackage);
+  await symlink(await realpath(firstPackage), secondPackage, 'dir');
+}
+
+test('built CLI resolves app-only dependencies from a standard pnpm workspace install', async () => {
+  const repo = await pnpmWorkspaceFixture();
+  try {
+    await installPnpmWorkspace(repo);
+    await repo.commit({
+      'apps/first/consumer.js':
+        "import chalk from 'chalk'; export const color = chalk.blue('first');",
+      'apps/second/consumer.js':
+        "import chalk from 'chalk'; export const color = chalk.blue('second');",
+      'apps/alias/consumer.js':
+        "import chalk from 'chalk-legacy'; export const color = chalk.blue('alias');",
+    });
+    const result = runCli(repo.root);
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toBe(
+      'apps/alias/consumer.js\napps/first/consumer.js\napps/second/consumer.js\n',
+    );
+    expect(result.stderr).toBe('');
+
+    await pointAliasAtWrongVersion(repo.root);
+    const mismatch = runCli(repo.root);
+    expect(mismatch.status).toBe(1);
+    expect(mismatch.stdout).toBe('');
+    expect(mismatch.stderr).toContain(
+      'installed package identity for chalk does not match pnpm-lock.yaml',
+    );
   } finally {
     await repo.cleanup();
   }

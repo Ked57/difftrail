@@ -34,6 +34,11 @@ interface PnpmLockState {
   readonly lockfile: string;
 }
 
+interface InstalledPackageIdentity {
+  readonly name: string;
+  readonly version: string;
+}
+
 export interface ExternalEvidence {
   readonly byImporterAndSpecifier: ReadonlyMap<string, ExternalPackageEvidence>;
 }
@@ -117,8 +122,13 @@ async function ensureSnapshotLink(
   snapshot: Snapshot,
   name: string,
   installedRoot: string,
+  importerManifest?: string,
 ): Promise<void> {
-  const destination = join(snapshot.directory, packagePath(name));
+  const destination = join(
+    snapshot.directory,
+    ...(importerManifest ? [dirname(importerManifest)] : []),
+    packagePath(name),
+  );
   try {
     await access(destination);
   } catch {
@@ -375,10 +385,19 @@ async function addPnpmImporterEvidence(
       locked.specifier,
       state.lockfile,
     );
-    const version = packageVersion(locked.version, name, state.lockfile);
-    const packageRoot = join(state.installedRoot, packagePath(name));
-    await validateInstalledIdentity(packageRoot, name, version, state.lockfile);
-    await ensureSnapshotLink(snapshot, name, packageRoot);
+    const identity = pnpmPackageIdentity(locked.version, name, state.lockfile);
+    const packageRoot = join(
+      state.installedRoot,
+      dirname(manifestPath),
+      packagePath(name),
+    );
+    await validateInstalledIdentity(
+      packageRoot,
+      identity.name,
+      identity.version,
+      state.lockfile,
+    );
+    await ensureSnapshotLink(snapshot, name, packageRoot, manifestPath);
     const result = {
       name,
       packageRoot,
@@ -403,14 +422,21 @@ function findPnpmDependency(
   throw new Error(`${lockfile} has no declaration for ${name}`);
 }
 
-function packageVersion(
+function pnpmPackageIdentity(
   value: unknown,
   name: string,
   lockfile: string,
-): string {
+): InstalledPackageIdentity {
   if (typeof value !== 'string')
     throw new Error(`${lockfile} has no supported version for ${name}`);
-  return value.split('(')[0] ?? '';
+  const resolved = value.split('(')[0] ?? '';
+  const separator = resolved.lastIndexOf('@');
+  return separator > 0
+    ? {
+        name: resolved.slice(0, separator),
+        version: resolved.slice(separator + 1),
+      }
+    : { name, version: resolved };
 }
 
 function checkDeclaration(
