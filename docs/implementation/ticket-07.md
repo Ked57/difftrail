@@ -14,4 +14,5 @@ The packaged-CLI history seam catches integration among Git snapshots, actual so
 - `pnpm --filter @difftrail/test-app typecheck` passed.
 - `pnpm build` passed for all workspaces.
 - `pnpm verify:fast` passed, including the app typecheck, repository lint/metrics, and 47 unit tests.
-- Real Git history results and full verification are pending the history harness run.
+- The real-Git histories are currently blocked before path assertions by pnpm workspace dependency evidence: the analyzer looks under root `node_modules` while app dependencies are installed under the app importer. The captured diagnostic and fixture layout are in `/private/tmp/ticket07-pnpm-workspace-repro.md`; do not treat history acceptance as passed until standard-layout histories run successfully.
+- Browser page navigation and interaction remain assigned to the separate manual-QA job.

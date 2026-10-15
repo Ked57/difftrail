@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync, execFileSync } from 'node:child_process';
 import {
-  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,7 +16,6 @@ const repository = realpathSync(
   join(dirname(fileURLToPath(import.meta.url)), '..'),
 );
 const cli = join(repository, 'packages/cli/dist/cli.js');
-const vite = join(repository, 'apps/test-app/node_modules/vite/bin/vite.js');
 const baseline = execFileSync('git', ['rev-parse', 'HEAD'], {
   cwd: repository,
   encoding: 'utf8',
@@ -65,12 +62,10 @@ function copyWorkspace(name) {
   runGit(cwd, ['checkout', '--quiet', '--detach', baseline]);
   runGit(cwd, ['config', 'user.name', 'Difftrail fixture']);
   runGit(cwd, ['config', 'user.email', 'fixture@example.invalid']);
-  const rootModules = join(repository, 'node_modules');
-  const appModules = join(repository, 'apps/test-app/node_modules');
-  if (!lstatSync(rootModules).isDirectory())
-    throw new Error('Workspace dependencies are not installed.');
-  symlinkSync(rootModules, join(cwd, 'node_modules'), 'dir');
-  symlinkSync(appModules, join(cwd, 'apps/test-app/node_modules'), 'dir');
+  execFileSync('pnpm', ['install', '--frozen-lockfile'], {
+    cwd,
+    stdio: 'ignore',
+  });
   return cwd;
 }
 
@@ -216,6 +211,7 @@ try {
         "dirs: ['./src/components/auto-alternate']",
       );
       write(cwd, 'apps/test-app/vite.config.ts', config);
+      const vite = join(cwd, 'apps/test-app/node_modules/vite/bin/vite.js');
       execFileSync(process.execPath, [realpathSync(vite), 'build'], {
         cwd: join(cwd, 'apps/test-app'),
         stdio: 'ignore',
