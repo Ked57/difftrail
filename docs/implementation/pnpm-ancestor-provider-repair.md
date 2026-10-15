@@ -55,5 +55,8 @@ manager layouts. Existing evidence rules remain responsible for those cases.
 
 ## Checks
 
-`pnpm verify:full` is required for this analyzer and CLI change. Focused
-analyzer and built CLI results are recorded in the final repair pin.
+`pnpm verify:full` passed on 2026-10-15: formatting, lint and difficulty audit,
+typecheck, 56 unit tests, 37 integration tests, package smoke, and Knip. The
+focused built CLI workspace fixture also passed with an ordinary frozen pnpm
+install. The latest integration docs tip was merged after this gate; that merge
+changed documentation only.
