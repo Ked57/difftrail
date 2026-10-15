@@ -13,6 +13,7 @@ import {
   workspaceForSpecifier,
 } from './workspaces.js';
 import { externalEvidenceFor, prepareExternalEvidence } from './external.js';
+import { externalEvidenceGap } from './external-errors.js';
 import { autoImportEdges } from './auto-imports.js';
 import { localReferenceEdges } from './local.js';
 import { analysisGap as gap } from './errors.js';
@@ -242,11 +243,7 @@ async function prepareInstalledEvidence(
     );
     return await prepareExternalEvidence(snapshot, sources, specifiers);
   } catch (error) {
-    throw gap(
-      snapshot,
-      '<external dependency evidence>',
-      error instanceof Error ? error.message : String(error),
-    );
+    throw externalEvidenceGap(snapshot, error);
   }
 }
 

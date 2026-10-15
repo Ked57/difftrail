@@ -188,6 +188,10 @@ test('built CLI resolves app-only dependencies from a standard pnpm workspace in
     expect(mismatch.status).toBe(1);
     expect(mismatch.stdout).toBe('');
     expect(mismatch.stderr).toContain(
+      'Analysis gap in apps/second/consumer.js at',
+    );
+    expect(mismatch.stderr).toContain('apps/second/package.json');
+    expect(mismatch.stderr).toContain(
       'installed package identity for chalk does not match pnpm-lock.yaml',
     );
   } finally {

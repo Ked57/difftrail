@@ -25,8 +25,10 @@ separate. npm's existing root-install evidence path is unchanged.
 For pnpm `npm:` package aliases, the importer key remains the declared alias;
 the resolved lock version supplies the installed package name and version.
 Missing importer links, mismatched package identity, or mismatched installed
-lock metadata remain analysis gaps. No install, fetch, or project script is
-run by Difftrail.
+lock metadata remain analysis gaps. Importer validation failures name the
+requiring source and package manifest; global lock evidence failures retain
+their lock-level context. No install, fetch, or project script is run by
+Difftrail.
 
 ## Regression seams
 
@@ -35,7 +37,9 @@ versions of the same dependency name, plus a third importer using an `npm:`
 alias. It checks the exact manifest and lock metadata edges, then removes an
 importer link and points another importer at the wrong package identity to
 verify both conditions fail with a gap. This does not exercise packaging or an
-actual package-manager install.
+actual package-manager install. It also requires missing-link, wrong-identity,
+and manifest/lock mismatch diagnostics to identify the requiring source and
+importer manifest.
 
 The built CLI fixture generates and commits a minimal pnpm v9 lock for two
 versions of one app-only dependency and a third app-only `npm:` alias. It

@@ -1,4 +1,4 @@
-import { mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { repository } from '../../../tests/helpers.js';
@@ -129,7 +129,7 @@ test('resolves each pnpm workspace importer and rejects missing or mismatched in
     await rm(firstAlias);
     await withComparison(repo.root, async (comparison) =>
       expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
-        'apps/first/node_modules/external-leaf/package.json',
+        /Analysis gap in apps\/first\/consumer\.js at .*apps\/first\/package\.json.*apps\/first\/node_modules\/external-leaf\/package\.json/,
       ),
     );
     await symlink(firstPackage, firstAlias, 'dir');
@@ -141,7 +141,25 @@ test('resolves each pnpm workspace importer and rejects missing or mismatched in
     );
     await withComparison(repo.root, async (comparison) =>
       expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
-        'installed package identity for external-leaf does not match pnpm-lock.yaml',
+        /Analysis gap in apps\/second\/consumer\.js at .*apps\/second\/package\.json.*installed package identity for external-leaf does not match pnpm-lock\.yaml/,
+      ),
+    );
+    await writeFile(
+      join(repo.root, 'apps/second/package.json'),
+      JSON.stringify({
+        name: 'second-app',
+        dependencies: { 'external-leaf': '2.1.0' },
+      }),
+    );
+    await repo.commit({
+      'apps/second/package.json': await readFile(
+        join(repo.root, 'apps/second/package.json'),
+        'utf8',
+      ),
+    });
+    await withComparison(repo.root, async (comparison) =>
+      expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
+        /Analysis gap in apps\/second\/consumer\.js at .*apps\/second\/package\.json.*pnpm-lock\.yaml declaration for external-leaf does not match apps\/second\/package\.json/,
       ),
     );
   } finally {

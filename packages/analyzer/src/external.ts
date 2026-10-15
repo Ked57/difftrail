@@ -5,6 +5,7 @@ import { access, mkdir, readFile, symlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import type { Snapshot } from '@difftrail/git';
+import { withImporterContext } from './external-errors.js';
 
 interface PackageManifest {
   readonly name?: unknown;
@@ -168,12 +169,8 @@ async function prepareNpmEvidence(
   const state = await loadNpmLockState(snapshot, committed, lockfile);
   const evidence = new Map<string, ExternalPackageEvidence>();
   for (const [manifestPath, packages] of requests)
-    await addNpmImporterEvidence(
-      snapshot,
-      state,
-      manifestPath,
-      packages,
-      evidence,
+    await withImporterContext(manifestPath, packages, () =>
+      addNpmImporterEvidence(snapshot, state, manifestPath, packages, evidence),
     );
   return evidence;
 }
@@ -346,12 +343,8 @@ async function preparePnpmEvidence(
   };
   const evidence = new Map<string, ExternalPackageEvidence>();
   for (const [manifestPath, names] of requests)
-    await addPnpmImporterEvidence(
-      snapshot,
-      state,
-      manifestPath,
-      names,
-      evidence,
+    await withImporterContext(manifestPath, names, () =>
+      addPnpmImporterEvidence(snapshot, state, manifestPath, names, evidence),
     );
   return evidence;
 }
