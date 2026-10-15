@@ -29,6 +29,8 @@ Ticket #17 implementation is complete on `codex/difftrail-cli` at integration me
 
 Ticket #18 implementation is complete on `codex/difftrail-cli` at integration merge commit `8b20c7c15b06214be0bc475560fba16d59041b6f`; issue #18 was closed after its evidence comment. Its separate Standards and Spec reviews, automated gate, packed CLI manual-QA results, repairs, and remaining limits are recorded in [Ticket 06 verification](../verification/ticket-06.md). Draft PR #21 remains open for Tickets 07–08.
 
+The independent pnpm ancestor-provider and TypeScript config-host repair was merged at `d1ee50dbd969a6bf4c8fce6a96179ca07b1103d7`. It is recorded separately in [pnpm ancestor-provider repair verification](../verification/pnpm-ancestor-provider-repair.md); it does not change the implementation ticket count or close a ticket.
+
 For ticket dispatch, read [ticket-proposal.md](ticket-proposal.md) and its acceptance matrix. For independent specification/final acceptance review, use [acceptance-checklist.md](acceptance-checklist.md). For bootstrap tool/runtime/version evidence, consult [tooling-research.md](tooling-research.md). These documents record planning/source review; they claim no implementation or executed runtime evidence.
 
 After the first product-code merge, open a draft PR against `master` closing #12 and #13–#20. Mark it ready after final acceptance/review/repairs; npm publication and PR merge are separate actions.
