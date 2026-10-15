@@ -51,9 +51,12 @@ export function parseSnapshotConfig(
         ? ts.flattenDiagnosticMessageText(unrecoverable.messageText, ' ')
         : `TypeScript could not read configuration ${configPath}`,
     );
-  if (parsed.errors.length) {
+  const errors = parsed.errors.filter(
+    (diagnostic) => diagnostic.code !== 18003,
+  );
+  if (errors.length) {
     throw new Error(
-      parsed.errors
+      errors
         .map((diagnostic) =>
           ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '),
         )
