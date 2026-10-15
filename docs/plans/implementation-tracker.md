@@ -1,0 +1,22 @@
+# Difftrail implementation tracker
+
+Approved 2026-10-15. Integration branch: `codex/difftrail-cli`; base: `master` at `4152bb8`.
+
+Specification: [#12 — implement the Difftrail impacted-file CLI and example monorepo](https://github.com/Ked57/difftrail/issues/12). The approved local synthesis is [spec-proposal.md](spec-proposal.md); the [completed wayfinder map #1](https://github.com/Ked57/difftrail/issues/1) and its linked resolutions remain the product authority. Existing closed planning issues #1–#11 were preserved.
+
+| Slice | Implementation ticket | Native blockers |
+| --- | --- | --- |
+| 01 | [#13 — Governed Turborepo and first packaged impact CLI](https://github.com/Ked57/difftrail/issues/13) | None |
+| 02 | [#14 — Complete independent endpoint impact and Git comparison semantics](https://github.com/Ked57/difftrail/issues/14) | #13 |
+| 03 | [#15 — Resolve aliases, workspaces and configuration consumers](https://github.com/Ked57/difftrail/issues/15) | #14 |
+| 04 | [#16 — Support Vue SFCs and explicit local assets](https://github.com/Ked57/difftrail/issues/16) | #15 |
+| 05 | [#17 — Resolve static auto-imports and enforce complete gap policy](https://github.com/Ked57/difftrail/issues/17) | #16 |
+| 06 | [#18 — Complete exact output, filters and explanations](https://github.com/Ked57/difftrail/issues/18) | #17 |
+| 07 | [#19 — Build the runnable multi-page Vue test app and real histories](https://github.com/Ked57/difftrail/issues/19) | #15, #16, #17 |
+| 08 | [#20 — Prove npm release readiness and complete the PR](https://github.com/Ked57/difftrail/issues/20) | #18, #19 |
+
+All eight are native sub-issues of #12 and labelled `ready-for-agent`. GitHub native dependencies determine the frontier. Slice 07 may run alongside 06 after #15/#16/#17 are resolved. Ticket closure follows the integration PR workflow; implementation completion and blocker release must have review, repairs, relevant gates and actual manual-QA evidence.
+
+For ticket dispatch, read [ticket-proposal.md](ticket-proposal.md) and its acceptance matrix. For independent specification/final acceptance review, use [acceptance-checklist.md](acceptance-checklist.md). For bootstrap tool/runtime/version evidence, consult [tooling-research.md](tooling-research.md). These documents record planning/source review; they claim no implementation or executed runtime evidence.
+
+After the first product-code merge, open a draft PR against `master` closing #12 and #13–#20. Mark it ready after final acceptance/review/repairs; npm publication and PR merge are separate actions.
