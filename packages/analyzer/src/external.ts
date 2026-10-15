@@ -1,5 +1,4 @@
 import { isDeepStrictEqual } from 'node:util';
-import { builtinModules } from 'node:module';
 import { readFileSync as fsReadFileSync } from 'node:fs';
 import { access, mkdir, readFile, symlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -9,15 +8,13 @@ import {
   withDependencyContext,
   withImporterContext,
 } from './external-errors.js';
-
-interface PackageManifest {
-  readonly name?: unknown;
-  readonly version?: unknown;
-  readonly dependencies?: unknown;
-  readonly devDependencies?: unknown;
-  readonly optionalDependencies?: unknown;
-  readonly peerDependencies?: unknown;
-}
+import {
+  dependencyDeclaration,
+  packageName,
+  providerRequests,
+  readSnapshotJson as readJson,
+  type PackageManifest,
+} from './external-manifest.js';
 
 interface ExternalPackageEvidence {
   readonly name: string;
@@ -51,70 +48,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function packageName(specifier: string): string | undefined {
-  if (
-    specifier.startsWith('.') ||
-    specifier.startsWith('/') ||
-    specifier.startsWith('#')
-  )
-    return undefined;
-  if (specifier.startsWith('node:')) return undefined;
-  const name = specifier.startsWith('@')
-    ? specifier.split('/').slice(0, 2).join('/')
-    : (specifier.split('/')[0] ?? '');
-  return builtinModules.includes(name) ||
-    builtinModules.includes(`node:${name}`)
-    ? undefined
-    : name;
-}
-
 function packagePath(name: string): string {
   return join('node_modules', ...name.split('/'));
-}
-
-function readJson(snapshot: Snapshot, path: string): unknown {
-  if (!snapshot.paths.includes(path))
-    throw new Error(`required committed file ${path} is missing`);
-  return JSON.parse(
-    fsReadFileSync(resolve(snapshot.directory, path), 'utf8'),
-  ) as unknown;
-}
-
-interface DependencyDeclaration {
-  readonly section:
-    | 'dependencies'
-    | 'devDependencies'
-    | 'optionalDependencies'
-    | 'peerDependencies';
-  readonly specifier: string;
-}
-
-function dependencyDeclaration(
-  manifest: PackageManifest,
-  name: string,
-): DependencyDeclaration | undefined {
-  for (const section of [
-    'dependencies',
-    'optionalDependencies',
-    'peerDependencies',
-    'devDependencies',
-  ] as const) {
-    const field = manifest[section];
-    if (isRecord(field) && typeof field[name] === 'string')
-      return { section, specifier: field[name] };
-  }
-  return undefined;
-}
-
-function importerManifest(snapshot: Snapshot, importer: string): string {
-  const parts = importer.split('/');
-  while (parts.length) {
-    const candidate = [...parts, 'package.json'].join('/');
-    if (snapshot.paths.includes(candidate)) return candidate;
-    parts.pop();
-  }
-  if (snapshot.paths.includes('package.json')) return 'package.json';
-  throw new Error(`source ${importer} has no committed package manifest`);
 }
 
 function lockImporter(manifest: string): string {
@@ -483,19 +418,11 @@ export async function prepareExternalEvidence(
   sources: readonly string[],
   specifiersBySource: ReadonlyMap<string, readonly string[]>,
 ): Promise<ExternalEvidence> {
-  const requests = new Map<string, Map<string, Set<string>>>();
-  for (const source of sources) {
-    for (const specifier of specifiersBySource.get(source) ?? []) {
-      const name = packageName(specifier);
-      if (!name) continue;
-      const manifest = importerManifest(snapshot, source);
-      const byName = requests.get(manifest) ?? new Map<string, Set<string>>();
-      const bucket = byName.get(name) ?? new Set<string>();
-      bucket.add(source);
-      byName.set(name, bucket);
-      requests.set(manifest, byName);
-    }
-  }
+  const requests = await providerRequests(
+    snapshot,
+    sources,
+    specifiersBySource,
+  );
   if (!requests.size) return { byImporterAndSpecifier: new Map() };
   const tracked = new Set(snapshot.paths);
   let evidence: Map<string, ExternalPackageEvidence>;
