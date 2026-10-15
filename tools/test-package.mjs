@@ -112,7 +112,11 @@ try {
       dependencies: { difftrail: `file:${join(temporary, archive)}` },
     }),
   );
-  run('pnpm', ['install', '--offline', '--ignore-scripts'], pnpmConsumer);
+  run(
+    'pnpm',
+    ['install', '--prefer-offline', '--ignore-scripts'],
+    pnpmConsumer,
+  );
   await writeFile(
     join(fixture, 'base.json'),
     JSON.stringify({
