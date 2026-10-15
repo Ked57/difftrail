@@ -5,6 +5,10 @@ import { access, mkdir, readFile, symlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import type { Snapshot } from '@difftrail/git';
+import {
+  withDependencyContext,
+  withImporterContext,
+} from './external-errors.js';
 
 interface PackageManifest {
   readonly name?: unknown;
@@ -32,6 +36,11 @@ interface PnpmLockState {
   readonly importers: Record<string, unknown>;
   readonly installedRoot: string;
   readonly lockfile: string;
+}
+
+interface InstalledPackageIdentity {
+  readonly name: string;
+  readonly version: string;
 }
 
 export interface ExternalEvidence {
@@ -117,8 +126,13 @@ async function ensureSnapshotLink(
   snapshot: Snapshot,
   name: string,
   installedRoot: string,
+  importerManifest?: string,
 ): Promise<void> {
-  const destination = join(snapshot.directory, packagePath(name));
+  const destination = join(
+    snapshot.directory,
+    ...(importerManifest ? [dirname(importerManifest)] : []),
+    packagePath(name),
+  );
   try {
     await access(destination);
   } catch {
@@ -158,12 +172,8 @@ async function prepareNpmEvidence(
   const state = await loadNpmLockState(snapshot, committed, lockfile);
   const evidence = new Map<string, ExternalPackageEvidence>();
   for (const [manifestPath, packages] of requests)
-    await addNpmImporterEvidence(
-      snapshot,
-      state,
-      manifestPath,
-      packages,
-      evidence,
+    await withImporterContext(manifestPath, () =>
+      addNpmImporterEvidence(snapshot, state, manifestPath, packages, evidence),
     );
   return evidence;
 }
@@ -223,24 +233,26 @@ async function addNpmImporterEvidence(
     `${state.lockfile} importer ${importerKey}`,
   );
   for (const [name, sources] of names) {
-    const declaration = dependencyDeclaration(manifest, name);
-    if (!declaration)
-      throw new Error(
-        `${manifestPath} does not declare external dependency ${name}`,
+    await withDependencyContext(manifestPath, sources, async () => {
+      const declaration = dependencyDeclaration(manifest, name);
+      if (!declaration)
+        throw new Error(
+          `${manifestPath} does not declare external dependency ${name}`,
+        );
+      const section = requireRecord(
+        entry[declaration.section],
+        `${state.lockfile} ${declaration.section} for ${importerKey}`,
       );
-    const section = requireRecord(
-      entry[declaration.section],
-      `${state.lockfile} ${declaration.section} for ${importerKey}`,
-    );
-    const result = await validateNpmPackage(
-      snapshot,
-      state,
-      manifestPath,
-      manifest,
-      section,
-      name,
-    );
-    addEvidenceSources(evidence, result, name, sources);
+      const result = await validateNpmPackage(
+        snapshot,
+        state,
+        manifestPath,
+        manifest,
+        section,
+        name,
+      );
+      for (const source of sources) evidence.set(`${source}\0${name}`, result);
+    });
   }
 }
 
@@ -336,12 +348,8 @@ async function preparePnpmEvidence(
   };
   const evidence = new Map<string, ExternalPackageEvidence>();
   for (const [manifestPath, names] of requests)
-    await addPnpmImporterEvidence(
-      snapshot,
-      state,
-      manifestPath,
-      names,
-      evidence,
+    await withImporterContext(manifestPath, () =>
+      addPnpmImporterEvidence(snapshot, state, manifestPath, names, evidence),
     );
   return evidence;
 }
@@ -367,25 +375,40 @@ async function addPnpmImporterEvidence(
     entry.optionalDependencies,
   ];
   for (const [name, sources] of names) {
-    const locked = findPnpmDependency(sections, name, state.lockfile);
-    checkDeclaration(
-      manifestPath,
-      manifest,
-      name,
-      locked.specifier,
-      state.lockfile,
-    );
-    const version = packageVersion(locked.version, name, state.lockfile);
-    const packageRoot = join(state.installedRoot, packagePath(name));
-    await validateInstalledIdentity(packageRoot, name, version, state.lockfile);
-    await ensureSnapshotLink(snapshot, name, packageRoot);
-    const result = {
-      name,
-      packageRoot,
-      manifest: manifestPath,
-      lockfile: state.lockfile,
-    };
-    addEvidenceSources(evidence, result, name, sources);
+    await withDependencyContext(manifestPath, sources, async () => {
+      const locked = findPnpmDependency(sections, name, state.lockfile);
+      checkDeclaration(
+        manifestPath,
+        manifest,
+        name,
+        locked.specifier,
+        state.lockfile,
+      );
+      const identity = pnpmPackageIdentity(
+        locked.version,
+        name,
+        state.lockfile,
+      );
+      const packageRoot = join(
+        state.installedRoot,
+        dirname(manifestPath),
+        packagePath(name),
+      );
+      await validateInstalledIdentity(
+        packageRoot,
+        identity.name,
+        identity.version,
+        state.lockfile,
+      );
+      await ensureSnapshotLink(snapshot, name, packageRoot, manifestPath);
+      const result = {
+        name,
+        packageRoot,
+        manifest: manifestPath,
+        lockfile: state.lockfile,
+      };
+      for (const source of sources) evidence.set(`${source}\0${name}`, result);
+    });
   }
 }
 
@@ -403,14 +426,21 @@ function findPnpmDependency(
   throw new Error(`${lockfile} has no declaration for ${name}`);
 }
 
-function packageVersion(
+function pnpmPackageIdentity(
   value: unknown,
   name: string,
   lockfile: string,
-): string {
+): InstalledPackageIdentity {
   if (typeof value !== 'string')
     throw new Error(`${lockfile} has no supported version for ${name}`);
-  return value.split('(')[0] ?? '';
+  const resolved = value.split('(')[0] ?? '';
+  const separator = resolved.lastIndexOf('@');
+  return separator > 0
+    ? {
+        name: resolved.slice(0, separator),
+        version: resolved.slice(separator + 1),
+      }
+    : { name, version: resolved };
 }
 
 function checkDeclaration(
@@ -445,15 +475,6 @@ async function validateInstalledIdentity(
     throw new Error(
       `installed package identity for ${name} does not match ${lockfile}`,
     );
-}
-
-function addEvidenceSources(
-  evidence: Map<string, ExternalPackageEvidence>,
-  result: ExternalPackageEvidence,
-  name: string,
-  sources: ReadonlySet<string>,
-): void {
-  for (const source of sources) evidence.set(`${source}\0${name}`, result);
 }
 
 /** Proves ordinary installed package targets against endpoint manifests and lock metadata. */
