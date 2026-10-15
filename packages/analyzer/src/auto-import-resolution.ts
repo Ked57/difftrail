@@ -1,4 +1,5 @@
 import { dirname, relative, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import type { DependencyEdge } from '@difftrail/core';
 import type { Snapshot } from '@difftrail/git';
 import enhancedResolve from 'enhanced-resolve';
@@ -156,10 +157,16 @@ async function resolveWorkspaceMapping(
   evidence: Awaited<ReturnType<typeof prepareWorkspaces>>,
 ): Promise<DependencyEdge[]> {
   try {
+    const consumer = workspaceConsumerManifest(
+      snapshot,
+      edge.importer,
+      workspace,
+    );
     const resolved = resolveWorkspaceEntry(
       snapshot,
       resolve(snapshot.directory, edge.importer),
       edge.dependency,
+      workspaceCondition(snapshot, edge.importer, consumer),
     );
     if (!resolved)
       throw new Error(
@@ -172,11 +179,6 @@ async function resolveWorkspaceMapping(
       throw new Error(
         `workspace auto-import ${edge.dependency} resolves outside the committed snapshot`,
       );
-    const consumer = workspaceConsumerManifest(
-      snapshot,
-      edge.importer,
-      workspace,
-    );
     return [
       { ...edge, dependency: target },
       ...[...evidence.membershipFiles, workspace.manifest, consumer].map(
@@ -201,9 +203,9 @@ function resolveWorkspaceEntry(
   snapshot: Snapshot,
   importer: string,
   specifier: string,
+  condition: 'import' | 'require',
 ): string {
   try {
-    const condition = /\.(?:cjs|cts)$/.test(importer) ? 'require' : 'import';
     const resolveFrom = enhancedResolve.create.sync({
       conditionNames: [condition, 'node', 'default'],
       exportsFields: ['exports'],
@@ -226,4 +228,22 @@ function resolveWorkspaceEntry(
   } catch {
     return '';
   }
+}
+
+function workspaceCondition(
+  snapshot: Snapshot,
+  importer: string,
+  consumerManifest: string,
+): 'import' | 'require' {
+  if (/\.(?:mjs|mts)$/.test(importer)) return 'import';
+  if (/\.(?:cjs|cts)$/.test(importer)) return 'require';
+  if (/\.(?:vue|jsx|tsx)$/.test(importer)) return 'import';
+  const manifest: unknown = JSON.parse(
+    readFileSync(resolve(snapshot.directory, consumerManifest), 'utf8'),
+  );
+  const type =
+    typeof manifest === 'object' && manifest !== null && 'type' in manifest
+      ? manifest.type
+      : undefined;
+  return type === 'module' ? 'import' : 'require';
 }

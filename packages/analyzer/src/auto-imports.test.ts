@@ -210,6 +210,7 @@ test('resolves direct workspace API mappings through committed package exports',
     'packages/shared/src/index.cjs': 'exports.useShared = () => 1;',
     'apps/site/package.json': JSON.stringify({
       name: 'site',
+      type: 'module',
       dependencies: { '@demo/shared': 'workspace:*' },
     }),
     'apps/site/vite.config.ts': [
@@ -255,6 +256,88 @@ test('resolves direct workspace API mappings through committed package exports',
             kind: 'configuration',
           }),
         ]),
+      );
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('selects workspace JS export conditions from each nearest package type', async () => {
+  const repo = await repository({
+    'package.json': JSON.stringify({
+      private: true,
+      workspaces: ['packages/*', 'apps/*'],
+    }),
+    'packages/shared/package.json': JSON.stringify({
+      name: '@demo/shared',
+      exports: {
+        '.': { import: './src/import.js', require: './src/require.cjs' },
+      },
+    }),
+    'packages/shared/src/import.js': 'export const useShared = () => 1;',
+    'packages/shared/src/require.cjs': 'exports.useShared = () => 2;',
+    'apps/commonjs/package.json': JSON.stringify({
+      name: 'commonjs-app',
+      type: 'commonjs',
+      dependencies: { '@demo/shared': 'workspace:*' },
+    }),
+    'apps/commonjs/src/page.js': 'exports.page = useShared();',
+    'apps/esm/package.json': JSON.stringify({
+      name: 'esm-app',
+      type: 'module',
+      dependencies: { '@demo/shared': 'workspace:*' },
+    }),
+    'apps/esm/src/page.js': 'export const page = useShared();',
+    'vite.config.ts': [
+      "import AutoImport from 'unplugin-auto-import';",
+      "export default AutoImport({ dts: false, imports: [{ '@demo/shared': ['useShared'] }] });",
+    ].join('\n'),
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const edges = await autoImportEdges(comparison.headSnapshot);
+      expect(edges).toContainEqual(
+        expect.objectContaining({
+          importer: 'apps/commonjs/src/page.js',
+          dependency: 'packages/shared/src/require.cjs',
+          kind: 'auto-import',
+        }),
+      );
+      expect(edges).toContainEqual(
+        expect.objectContaining({
+          importer: 'apps/esm/src/page.js',
+          dependency: 'packages/shared/src/import.js',
+          kind: 'auto-import',
+        }),
+      );
+      expect(edges).not.toContainEqual(
+        expect.objectContaining({
+          importer: 'apps/commonjs/src/page.js',
+          dependency: 'packages/shared/src/import.js',
+          kind: 'auto-import',
+        }),
+      );
+      expect(edges).not.toContainEqual(
+        expect.objectContaining({
+          importer: 'apps/esm/src/page.js',
+          dependency: 'packages/shared/src/require.cjs',
+          kind: 'auto-import',
+        }),
+      );
+      expect(edges).toContainEqual(
+        expect.objectContaining({
+          importer: 'apps/commonjs/src/page.js',
+          dependency: 'apps/commonjs/package.json',
+          kind: 'metadata',
+        }),
+      );
+      expect(edges).toContainEqual(
+        expect.objectContaining({
+          importer: 'apps/esm/src/page.js',
+          dependency: 'apps/esm/package.json',
+          kind: 'metadata',
+        }),
       );
     });
   } finally {

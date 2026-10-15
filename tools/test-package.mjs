@@ -325,6 +325,8 @@ try {
             name: 'site',
             devDependencies: { 'unplugin-auto-import': '1.0.0' },
           },
+          'apps/commonjs': { name: 'commonjs-app' },
+          'apps/esm': { name: 'esm-app' },
           'packages/shared': { name: '@demo/shared' },
           'node_modules/unplugin-auto-import': { version: '1.0.0' },
         },
@@ -346,8 +348,19 @@ try {
       'packages/shared/src/require.cjs': 'exports.useShared = () => 2;',
       'apps/site/package.json': JSON.stringify({
         name: 'site',
+        type: 'module',
         dependencies: { '@demo/shared': 'workspace:*' },
         devDependencies: { 'unplugin-auto-import': '1.0.0' },
+      }),
+      'apps/commonjs/package.json': JSON.stringify({
+        name: 'commonjs-app',
+        type: 'commonjs',
+        dependencies: { '@demo/shared': 'workspace:*' },
+      }),
+      'apps/esm/package.json': JSON.stringify({
+        name: 'esm-app',
+        type: 'module',
+        dependencies: { '@demo/shared': 'workspace:*' },
       }),
       'node_modules/.package-lock.json': JSON.stringify({
         name: 'workspace-root',
@@ -363,6 +376,8 @@ try {
       ].join('\n'),
       'apps/site/src/page.ts': 'export const page = useShared();',
       'apps/site/src/page.cjs': 'exports.page = useShared();',
+      'apps/commonjs/src/page.js': 'exports.page = useShared();',
+      'apps/esm/src/page.js': 'export const page = useShared();',
     },
     'baseline workspace auto-import mapping',
   );
@@ -402,6 +417,8 @@ try {
   const workspaceOutput = run(bin, [], workspaceFixture);
   assert.ok(workspaceOutput.includes('packages/shared/src/import.js'));
   assert.ok(workspaceOutput.includes('apps/site/src/page.ts'));
+  assert.ok(workspaceOutput.includes('apps/esm/src/page.js'));
+  assert.equal(workspaceOutput.includes('apps/commonjs/src/page.js'), false);
   assert.ok(
     workspaceOutput.includes('packages/shared/src/require.cjs') === false,
   );
@@ -413,6 +430,8 @@ try {
   const requireOutput = run(bin, [], workspaceFixture);
   assert.ok(requireOutput.includes('packages/shared/src/require.cjs'));
   assert.ok(requireOutput.includes('apps/site/src/page.cjs'));
+  assert.ok(requireOutput.includes('apps/commonjs/src/page.js'));
+  assert.equal(requireOutput.includes('apps/esm/src/page.js'), false);
   assert.ok(requireOutput.includes('packages/shared/src/import.js') === false);
   const pnpmConsumer = join(temporary, 'pnpm-consumer');
   await mkdir(pnpmConsumer);
