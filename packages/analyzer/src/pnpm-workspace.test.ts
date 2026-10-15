@@ -5,6 +5,22 @@ import { repository } from '../../../tests/helpers.js';
 import { withComparison } from '@difftrail/git';
 import { extractGraph } from './index.js';
 
+test('does not require package manifests for sources without external requests', async () => {
+  const repo = await repository({
+    'leaf.js': 'export const leaf = 1;',
+    'consumer.js':
+      "import {readFile} from 'node:fs'; import {leaf} from './leaf.js'; export const value = readFile && leaf;",
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(graph.edges.map((edge) => edge.dependency)).toEqual(['leaf.js']);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
 const packages = [
   { app: 'first', link: 'external-leaf', version: '1.2.3' },
   { app: 'second', link: 'external-leaf', version: '2.0.0' },
@@ -231,6 +247,143 @@ test('attributes dependency evidence gaps to a source that imports that dependen
     await withComparison(repo.root, async (comparison) =>
       expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
         /Analysis gap in apps\/first\/z-bad\.js at .*apps\/first\/package\.json: installed package identity for bad-leaf does not match pnpm-lock\.yaml/,
+      ),
+    );
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+function rootProviderLock(localProvider = false): string {
+  const lines = [
+    'lockfileVersion: 9.0',
+    'settings: {}',
+    'importers:',
+    '  .:',
+    '    devDependencies:',
+    '      external-leaf:',
+    '        specifier: 1.0.0',
+    '        version: 1.0.0',
+    ...(localProvider
+      ? [
+          '  apps/first:',
+          '    dependencies:',
+          '      external-leaf:',
+          '        specifier: 2.0.0',
+          '        version: 2.0.0',
+        ]
+      : ['  apps/first: {}']),
+    'packages:',
+    '  external-leaf@1.0.0:',
+    '    resolution: {integrity: sha512-one}',
+    ...(localProvider
+      ? ['  external-leaf@2.0.0:', '    resolution: {integrity: sha512-two}']
+      : []),
+    'snapshots:',
+    '  external-leaf@1.0.0: {}',
+    ...(localProvider ? ['  external-leaf@2.0.0: {}'] : []),
+  ];
+  return lines.join('\n');
+}
+
+async function rootProviderRepository() {
+  const lock = rootProviderLock();
+  const repo = await repository({
+    '.gitignore': 'node_modules/\n',
+    'package.json': JSON.stringify({
+      name: 'pnpm-workspace',
+      private: true,
+      devDependencies: { 'external-leaf': '1.0.0' },
+    }),
+    'pnpm-workspace.yaml': 'packages:\n  - apps/*\n',
+    'pnpm-lock.yaml': lock,
+    'apps/first/package.json': JSON.stringify({ name: 'first-app' }),
+    'apps/first/consumer.js': "import 'external-leaf';",
+  });
+  const packageRoot = join(
+    repo.root,
+    'node_modules/.pnpm/external-leaf@1.0.0/node_modules/external-leaf',
+  );
+  const rootModules = join(repo.root, 'node_modules');
+  await mkdir(packageRoot, { recursive: true });
+  await writeFile(
+    join(packageRoot, 'package.json'),
+    JSON.stringify({ name: 'external-leaf', version: '1.0.0' }),
+  );
+  await writeFile(join(packageRoot, 'index.js'), 'export const value = 1;');
+  await mkdir(rootModules, { recursive: true });
+  await symlink(packageRoot, join(rootModules, 'external-leaf'), 'dir');
+  await mkdir(join(rootModules, '.pnpm'), { recursive: true });
+  await writeFile(
+    join(rootModules, '.modules.yaml'),
+    'virtualStoreDir: .pnpm\n',
+  );
+  await writeFile(join(rootModules, '.pnpm/lock.yaml'), lock);
+  return { repo, packageRoot, rootModules };
+}
+
+test('resolves and validates an ancestor pnpm provider for an undeclared consumer', async () => {
+  const { repo, packageRoot, rootModules } = await rootProviderRepository();
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(
+        graph.edges
+          .filter((edge) => edge.kind === 'metadata')
+          .map((edge) => [edge.importer, edge.dependency]),
+      ).toEqual([
+        ['apps/first/consumer.js', 'package.json'],
+        ['apps/first/consumer.js', 'pnpm-lock.yaml'],
+      ]);
+    });
+    await writeFile(
+      join(packageRoot, 'package.json'),
+      JSON.stringify({ name: 'external-leaf', version: '2.0.0' }),
+    );
+    await withComparison(repo.root, async (comparison) =>
+      expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
+        /Analysis gap in apps\/first\/consumer\.js at .*package\.json: installed package identity for external-leaf does not match pnpm-lock\.yaml/,
+      ),
+    );
+    await writeFile(
+      join(packageRoot, 'package.json'),
+      JSON.stringify({ name: 'external-leaf', version: '1.0.0' }),
+    );
+    await rm(join(rootModules, 'external-leaf'));
+    await withComparison(repo.root, async (comparison) =>
+      expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
+        /Analysis gap in apps\/first\/consumer\.js at .*package\.json.*node_modules\/external-leaf\/package\.json/,
+      ),
+    );
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('does not borrow a pnpm ancestor version when the consumer declares the dependency', async () => {
+  const { repo, packageRoot, rootModules } = await rootProviderRepository();
+  try {
+    const manifest = JSON.stringify({
+      name: 'first-app',
+      dependencies: { 'external-leaf': '2.0.0' },
+    });
+    const lock = rootProviderLock(true);
+    await repo.commit({
+      'apps/first/package.json': manifest,
+      'pnpm-lock.yaml': lock,
+    });
+    await mkdir(join(repo.root, 'apps/first/node_modules'), {
+      recursive: true,
+    });
+    await symlink(
+      packageRoot,
+      join(repo.root, 'apps/first/node_modules/external-leaf'),
+      'dir',
+    );
+    await writeFile(join(rootModules, '.pnpm/lock.yaml'), lock);
+    await withComparison(repo.root, async (comparison) =>
+      expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
+        /Analysis gap in apps\/first\/consumer\.js at .*apps\/first\/package\.json: installed package identity for external-leaf does not match pnpm-lock\.yaml/,
       ),
     );
   } finally {

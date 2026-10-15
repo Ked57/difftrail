@@ -157,6 +157,58 @@ function runCli(root: string) {
   });
 }
 
+async function rootProviderFixture() {
+  return repository({
+    '.gitignore': 'node_modules/\n',
+    'package.json': JSON.stringify({
+      name: 'pnpm-root-provider-fixture',
+      private: true,
+      packageManager: 'pnpm@10.34.7',
+      devDependencies: { chalk: '4.1.2' },
+    }),
+    'pnpm-workspace.yaml': 'packages:\n  - apps/*\n',
+    'apps/site/package.json': JSON.stringify({ name: 'site-app' }),
+    'apps/site/consumer.js':
+      "import chalk from 'chalk'; export const color = chalk.green('site');",
+  });
+}
+
+async function installRootProviderWorkspace(
+  repo: Awaited<ReturnType<typeof repository>>,
+  changedManifests: readonly string[] = [],
+): Promise<void> {
+  const lock = pnpmCommand(repo.root, [
+    'install',
+    '--lockfile-only',
+    '--ignore-scripts',
+    '--prefer-offline',
+  ]);
+  expect(lock.status, `${lock.stdout}\n${lock.stderr}`).toBe(0);
+  const paths = [...changedManifests, 'pnpm-lock.yaml'];
+  const entries = await Promise.all(
+    paths.map(
+      async (path) =>
+        [path, await readFile(join(repo.root, path), 'utf8')] as const,
+    ),
+  );
+  await repo.commit(Object.fromEntries(entries));
+  const install = pnpmCommand(repo.root, [
+    'install',
+    '--frozen-lockfile',
+    '--ignore-scripts',
+    '--prefer-offline',
+  ]);
+  expect(install.status, `${install.stdout}\n${install.stderr}`).toBe(0);
+}
+
+function expectCliGap(root: string, ...context: readonly string[]): void {
+  const result = runCli(root);
+  expect(result.status).toBe(1);
+  expect(result.stdout).toBe('');
+  for (const part of context)
+    expect(result.stderr, result.stderr).toContain(part);
+}
+
 async function pointAliasAtWrongVersion(root: string): Promise<void> {
   const secondPackage = join(root, 'apps/second/node_modules/chalk');
   const firstPackage = join(root, 'apps/first/node_modules/chalk');
@@ -192,6 +244,77 @@ test('built CLI resolves app-only dependencies from a standard pnpm workspace in
     );
     expect(mismatch.stderr).toContain('apps/second/package.json');
     expect(mismatch.stderr).toContain(
+      'installed package identity for chalk does not match pnpm-lock.yaml',
+    );
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI resolves root-only pnpm providers and rejects invalid ancestor evidence', async () => {
+  const repo = await rootProviderFixture();
+  const rootLink = join(repo.root, 'node_modules/chalk');
+  try {
+    await installRootProviderWorkspace(repo);
+    await expect(lstat(rootLink)).resolves.toBeDefined();
+    await expect(
+      lstat(join(repo.root, 'apps/site/node_modules/chalk')),
+    ).rejects.toThrow();
+
+    await repo.commit({
+      'apps/site/consumer.js':
+        "import chalk from 'chalk'; export const color = chalk.blue('site');",
+    });
+    const result = runCli(repo.root);
+    expect(result).toMatchObject({
+      status: 0,
+      stdout: 'apps/site/consumer.js\n',
+      stderr: '',
+    });
+
+    const rootPackage = await realpath(rootLink);
+    await rm(rootLink);
+    expectCliGap(
+      repo.root,
+      'apps/site/consumer.js',
+      'node_modules/chalk/package.json',
+    );
+    await symlink(rootPackage, rootLink, 'dir');
+
+    await writeFile(
+      join(rootPackage, 'package.json'),
+      JSON.stringify({ name: 'chalk', version: '0.0.0' }),
+    );
+    expectCliGap(
+      repo.root,
+      'installed package identity for chalk does not match pnpm-lock.yaml',
+    );
+    await writeFile(
+      join(rootPackage, 'package.json'),
+      JSON.stringify({
+        name: 'chalk',
+        version: '4.1.2',
+        main: 'source/index.js',
+      }),
+    );
+
+    const localManifest = JSON.stringify({
+      name: 'site-app',
+      dependencies: { chalk: '5.6.2' },
+    });
+    await writeFile(join(repo.root, 'apps/site/package.json'), localManifest);
+    await installRootProviderWorkspace(repo, ['apps/site/package.json']);
+    const appLink = join(repo.root, 'apps/site/node_modules/chalk');
+    await rm(appLink);
+    await symlink(rootPackage, appLink, 'dir');
+    await repo.commit({
+      'apps/site/consumer.js':
+        "import chalk from 'chalk'; export const color = chalk.red('site');",
+    });
+    expectCliGap(
+      repo.root,
+      'Analysis gap in apps/site/consumer.js at',
+      'apps/site/package.json',
       'installed package identity for chalk does not match pnpm-lock.yaml',
     );
   } finally {
