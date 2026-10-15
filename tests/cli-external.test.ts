@@ -6,14 +6,18 @@ import { repository } from './helpers.js';
 
 const executable = resolve('packages/cli/dist/cli.js');
 
-test('built CLI accepts an external package backed by matching npm install metadata', async () => {
+test('built CLI resolves workspace devDependencies from matching npm install metadata', async () => {
   const lock = {
     name: 'npm-cli-fixture',
     lockfileVersion: 3,
     packages: {
       '': {
         name: 'npm-cli-fixture',
-        dependencies: { 'external-leaf': '1.2.3' },
+        workspaces: ['packages/*'],
+      },
+      'packages/app': {
+        name: 'npm-cli-app',
+        devDependencies: { 'external-leaf': '1.2.3' },
       },
       'node_modules/external-leaf': {
         version: '1.2.3',
@@ -27,10 +31,14 @@ test('built CLI accepts an external package backed by matching npm install metad
     '.gitignore': 'node_modules/\n',
     'package.json': JSON.stringify({
       name: 'npm-cli-fixture',
-      dependencies: { 'external-leaf': '1.2.3' },
+      workspaces: ['packages/*'],
     }),
     'package-lock.json': JSON.stringify(lock),
-    'consumer.js':
+    'packages/app/package.json': JSON.stringify({
+      name: 'npm-cli-app',
+      devDependencies: { 'external-leaf': '1.2.3' },
+    }),
+    'packages/app/consumer.js':
       "import {value} from 'external-leaf'; export const result = value;",
   });
   try {
@@ -51,7 +59,7 @@ test('built CLI accepts an external package backed by matching npm install metad
       JSON.stringify({ lockfileVersion: 3, packages: lock.packages }),
     );
     await repo.commit({
-      'consumer.js':
+      'packages/app/consumer.js':
         "import {value} from 'external-leaf'; export const result = value + 1;",
     });
     const result = spawnSync(process.execPath, [executable], {
@@ -60,7 +68,7 @@ test('built CLI accepts an external package backed by matching npm install metad
     });
     expect(result).toMatchObject({
       status: 0,
-      stdout: 'consumer.js\n',
+      stdout: 'packages/app/consumer.js\n',
       stderr: '',
     });
   } finally {

@@ -336,7 +336,7 @@ function resolvedRelationships(
       ?.relationships.some(
         (relationship) =>
           relationship.specifier === dependency.module &&
-          (relationship.kind === 'require' ? 'cjs' : 'es6') ===
+          (isCommonJsRelationship(relationship.kind) ? 'cjs' : 'es6') ===
             dependency.moduleSystem &&
           resolved.condition ===
             (dependency.moduleSystem === 'cjs' ? 'require' : 'import'),
@@ -458,7 +458,8 @@ async function localDependencyEdges(
       ?.relationships.filter(
         (item) =>
           item.specifier === dependency.module &&
-          (item.kind === 'require' ? 'cjs' : 'es6') === dependency.moduleSystem,
+          (isCommonJsRelationship(item.kind) ? 'cjs' : 'es6') ===
+            dependency.moduleSystem,
       ) ?? [];
   if (!relationships.length)
     throw gap(
@@ -496,6 +497,10 @@ async function localDependencyEdges(
       kind: 'metadata',
     })),
   ];
+}
+
+function isCommonJsRelationship(kind: string): boolean {
+  return kind === 'require' || kind === 'import-equals';
 }
 
 async function checkedWorkspaceConsumer(

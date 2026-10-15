@@ -5,6 +5,50 @@ import { repository } from './helpers.js';
 
 const executable = resolve('packages/cli/dist/cli.js');
 
+test('built CLI includes TypeScript import-equals consumers', async () => {
+  const repo = await repository({
+    'leaf.ts': 'export const value = 1;',
+    'consumer.ts':
+      "import leaf = require('./leaf'); export const result = leaf.value;",
+  });
+  try {
+    await repo.commit({ 'leaf.ts': 'export const value = 2;' });
+    const result = spawnSync(process.execPath, [executable], {
+      cwd: repo.root,
+      encoding: 'utf8',
+    });
+    expect(result).toMatchObject({
+      status: 0,
+      stdout: 'consumer.ts\nleaf.ts\n',
+      stderr: '',
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI includes TypeScript import type query consumers', async () => {
+  const repo = await repository({
+    'leaf.ts': 'export interface Leaf {value: number}',
+    'consumer.ts':
+      "type Leaf = import('./leaf').Leaf; export const result: Leaf = {value: 1};",
+  });
+  try {
+    await repo.commit({ 'leaf.ts': 'export interface Leaf {value: string}' });
+    const result = spawnSync(process.execPath, [executable], {
+      cwd: repo.root,
+      encoding: 'utf8',
+    });
+    expect(result).toMatchObject({
+      status: 0,
+      stdout: 'consumer.ts\nleaf.ts\n',
+      stderr: '',
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
 test('config-only alias changes reach configured consumers and exclude another package', async () => {
   const repo = await repository({
     'base.json': JSON.stringify({

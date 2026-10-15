@@ -71,17 +71,28 @@ function readJson(snapshot: Snapshot, path: string): unknown {
   ) as unknown;
 }
 
+interface DependencyDeclaration {
+  readonly section:
+    | 'dependencies'
+    | 'devDependencies'
+    | 'optionalDependencies'
+    | 'peerDependencies';
+  readonly specifier: string;
+}
+
 function dependencyDeclaration(
   manifest: PackageManifest,
   name: string,
-): string | undefined {
-  for (const field of [
-    manifest.dependencies,
-    manifest.optionalDependencies,
-    manifest.peerDependencies,
-    manifest.devDependencies,
-  ]) {
-    if (isRecord(field) && typeof field[name] === 'string') return field[name];
+): DependencyDeclaration | undefined {
+  for (const section of [
+    'dependencies',
+    'optionalDependencies',
+    'peerDependencies',
+    'devDependencies',
+  ] as const) {
+    const field = manifest[section];
+    if (isRecord(field) && typeof field[name] === 'string')
+      return { section, specifier: field[name] };
   }
   return undefined;
 }
@@ -211,17 +222,22 @@ async function addNpmImporterEvidence(
     state.committedPackages[importerKey],
     `${state.lockfile} importer ${importerKey}`,
   );
-  const dependencies = requireRecord(
-    entry.dependencies,
-    `${state.lockfile} dependencies for ${importerKey}`,
-  );
   for (const [name, sources] of names) {
+    const declaration = dependencyDeclaration(manifest, name);
+    if (!declaration)
+      throw new Error(
+        `${manifestPath} does not declare external dependency ${name}`,
+      );
+    const section = requireRecord(
+      entry[declaration.section],
+      `${state.lockfile} ${declaration.section} for ${importerKey}`,
+    );
     const result = await validateNpmPackage(
       snapshot,
       state,
       manifestPath,
       manifest,
-      dependencies,
+      section,
       name,
     );
     addEvidenceSources(evidence, result, name, sources);
@@ -409,7 +425,7 @@ function checkDeclaration(
     throw new Error(
       `${manifestPath} does not declare external dependency ${name}`,
     );
-  if (lockedSpecifier !== declared)
+  if (lockedSpecifier !== declared.specifier)
     throw new Error(
       `${lockfile} declaration for ${name} does not match ${manifestPath}`,
     );

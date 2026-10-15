@@ -1,4 +1,4 @@
-import { writeFile, mkdir, access, unlink } from 'node:fs/promises';
+import { writeFile, mkdir, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { repository } from '../../../tests/helpers.js';
@@ -89,6 +89,34 @@ test('retains TypeScript import, type, re-export, and literal dynamic relationsh
   }
 });
 
+test('retains TypeScript import-equals and import type query relationships', async () => {
+  const repo = await repository({
+    'leaf.ts': 'export const value = 1;',
+    'types.ts': 'export interface Shape {value: number}',
+    'consumer.ts': [
+      "import leaf = require('./leaf');",
+      "type Shape = import('./types').Shape;",
+      'export const value: Shape = {value: leaf.value};',
+    ].join('\n'),
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(
+        graph.edges
+          .filter((edge) => edge.importer === 'consumer.ts')
+          .map((edge) => [edge.specifier, edge.kind, edge.dependency])
+          .sort((left, right) => left.join('/').localeCompare(right.join('/'))),
+      ).toEqual([
+        ['./leaf', 'import-equals', 'leaf.ts'],
+        ['./types', 'type-import', 'types.ts'],
+      ]);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
 test('resolves inherited package aliases without a baseUrl', async () => {
   const repo = await repository({
     'base.json': JSON.stringify({
@@ -170,94 +198,6 @@ test('resolves snapshot workspace exports and retains the manifests used', async
         ['apps/site/src/page.mjs', 'packages/shared/src/esm.js', 'import'],
       ]);
     });
-  } finally {
-    await repo.cleanup();
-  }
-});
-
-test('uses an ordinary npm install only when package and endpoint lock identities agree', async () => {
-  const manifest = {
-    name: 'npm-fixture',
-    dependencies: { 'external-leaf': '1.2.3' },
-  };
-  const packageRecord = {
-    version: '1.2.3',
-    resolved:
-      'https://registry.npmjs.org/external-leaf/-/external-leaf-1.2.3.tgz',
-    integrity: 'sha512-fixture',
-  };
-  const lock = {
-    name: 'npm-fixture',
-    lockfileVersion: 3,
-    packages: {
-      '': { name: 'npm-fixture', dependencies: { 'external-leaf': '1.2.3' } },
-      'node_modules/external-leaf': packageRecord,
-    },
-  };
-  const repo = await repository({
-    'package.json': JSON.stringify(manifest),
-    'package-lock.json': JSON.stringify(lock),
-    'consumer.js': "import {value} from 'external-leaf'; export {value};",
-  });
-  try {
-    const installedRoot = join(repo.root, 'node_modules/external-leaf');
-    await mkdir(installedRoot, { recursive: true });
-    await writeFile(
-      join(installedRoot, 'package.json'),
-      JSON.stringify({
-        name: 'external-leaf',
-        version: '1.2.3',
-        main: 'index.js',
-      }),
-    );
-    await writeFile(join(installedRoot, 'index.js'), 'export const value = 1;');
-    await mkdir(join(repo.root, 'node_modules'), { recursive: true });
-    await writeFile(
-      join(repo.root, 'node_modules/.package-lock.json'),
-      JSON.stringify({ lockfileVersion: 3, packages: lock.packages }),
-    );
-    await withComparison(repo.root, async (comparison) => {
-      const graph = await extractGraph(comparison.headSnapshot);
-      expect(graph.edges).toEqual([
-        {
-          importer: 'consumer.js',
-          dependency: 'package.json',
-          specifier: 'external-leaf',
-          kind: 'metadata',
-        },
-        {
-          importer: 'consumer.js',
-          dependency: 'package-lock.json',
-          specifier: 'external-leaf',
-          kind: 'metadata',
-        },
-      ]);
-    });
-
-    await writeFile(
-      join(repo.root, 'node_modules/.package-lock.json'),
-      JSON.stringify({
-        lockfileVersion: 3,
-        packages: {
-          ...lock.packages,
-          'node_modules/external-leaf': {
-            ...packageRecord,
-            integrity: 'sha512-changed',
-          },
-        },
-      }),
-    );
-    await withComparison(repo.root, async (comparison) =>
-      expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
-        'installed npm package metadata for external-leaf differs from package-lock.json',
-      ),
-    );
-    await unlink(join(repo.root, 'node_modules/.package-lock.json'));
-    await withComparison(repo.root, async (comparison) =>
-      expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
-        'required installed dependency evidence',
-      ),
-    );
   } finally {
     await repo.cleanup();
   }

@@ -6,12 +6,12 @@ API for resolution and TypeScript's shipped parser for source and configuration
 inspection. It resolves import and require conditions separately so conditional
 package exports select the branch used by each relationship.
 
-The source pass records import, type import, re-export, type re-export, literal
-dynamic import, and CommonJS require relationships. It rejects malformed
-source, unresolved dependencies, non-literal loader calls, and unsupported
-source syntax with an analysis gap that identifies the file and revision.
-Runtime require shadowing accounts for parameters, local bindings, imports,
-and TypeScript-only ambient declarations.
+The source pass records import, import-equals, type import, import type query,
+re-export, type re-export, literal dynamic import, and CommonJS require
+relationships. It rejects malformed source, unresolved dependencies,
+non-literal loader calls, and unsupported source syntax with an analysis gap
+that identifies the file and revision. Runtime require shadowing accounts for
+parameters, local bindings, imports, and TypeScript-only ambient declarations.
 
 Tracked TypeScript configuration files are parsed without running project code.
 Inherited configuration paths must resolve to files in the selected snapshot.
@@ -25,12 +25,15 @@ manifests used for that resolution.
 
 Installed external package entry points are accepted only when endpoint
 evidence matches committed metadata and the importing package declares the
-dependency. The implemented evidence formats are npm package-lock v2/v3 with
-node_modules/.package-lock.json, and pnpm lockfile v9 with its installed
-lockfile and modules metadata. The npm proof currently supports the
-root-level package layout. pnpm requires the installed lock metadata to match
-the committed lock. Missing or mismatched evidence fails with an analysis gap;
-the analyzer never installs packages or runs repository scripts.
+dependency. npm declarations are checked against their matching lock section
+(dependencies, devDependencies, optionalDependencies, or peerDependencies),
+including workspace importer sections. The implemented evidence formats are
+npm package-lock v2/v3 with node_modules/.package-lock.json, and pnpm lockfile
+v9 with its installed lockfile and modules metadata. The npm proof currently
+supports the root-level package layout. pnpm requires the installed lock
+metadata to match the committed lock. Missing or mismatched evidence fails
+with an analysis gap; the analyzer never installs packages or runs repository
+scripts.
 
 tsconfig-paths-webpack-plugin 4.2.0 has an optional compatibility
 require of enhanced-resolve/lib/createInnerCallback. The locked
@@ -50,10 +53,11 @@ explicitly rather than being silently omitted.
 
 pnpm verify:full passed:
 
-- Format, ESLint, TypeScript typecheck, and unit tests (18 tests).
-- Integration tests (28 tests).
+- Format, ESLint, TypeScript typecheck, and unit tests (22 tests).
+- Integration tests (30 tests).
 - npm and strict isolated pnpm tarball consumers, including execution of a
-  config-only TypeScript alias change in the pnpm consumer.
+  config-only TypeScript alias change in the pnpm consumer. The CLI regressions
+  also cover import-equals, import type query, and workspace npm devDependencies.
 - Package metadata, executable, license, and shipped TypeScript parser smoke.
 - Knip.
 
@@ -61,3 +65,7 @@ The integration and package checks were run against the built CLI. The
 standalone analyzer Vitest invocation has a nonzero exit when the project's
 core-only 100% coverage thresholds are enabled without the core test file, so
 the full unit suite is the authoritative analyzer regression run.
+
+The small JSON object-shape guards remain local to the workspace-manifest and
+external-lock modules. They are only three lines each, and a shared analyzer
+JSON utility would add a new module without a wider use case.

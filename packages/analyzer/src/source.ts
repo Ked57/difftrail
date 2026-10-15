@@ -99,6 +99,29 @@ function recordRelationship(
     return;
   }
   if (
+    ts.isImportEqualsDeclaration(node) &&
+    ts.isExternalModuleReference(node.moduleReference) &&
+    node.moduleReference.expression &&
+    ts.isStringLiteralLike(node.moduleReference.expression)
+  ) {
+    relationships.push({
+      specifier: node.moduleReference.expression.text,
+      kind: 'import-equals',
+    });
+    return;
+  }
+  if (
+    ts.isImportTypeNode(node) &&
+    ts.isLiteralTypeNode(node.argument) &&
+    ts.isStringLiteralLike(node.argument.literal)
+  ) {
+    relationships.push({
+      specifier: node.argument.literal.text,
+      kind: 'type-import',
+    });
+    return;
+  }
+  if (
     ts.isExportDeclaration(node) &&
     node.moduleSpecifier &&
     ts.isStringLiteralLike(node.moduleSpecifier)
