@@ -11,6 +11,8 @@
     "@difftrail/core": "workspace:*",
     "@difftrail/git": "workspace:*",
     "dependency-cruiser": "18.6.0",
+    "tsconfig-paths-webpack-plugin": "4.2.0",
+    "yaml": "2.9.1",
     "typescript": "6.0.3"
   }
 }

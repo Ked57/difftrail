@@ -101,6 +101,16 @@ function ownerUrl(expression: ts.Expression | undefined): boolean {
     expression.expression.name.text === 'meta'
   );
 }
+function hasRuntimeDeclaration(
+  declarations: readonly ts.Declaration[],
+): boolean {
+  return declarations.some(
+    (declaration) =>
+      !declaration.getSourceFile().isDeclarationFile &&
+      (ts.getCombinedModifierFlags(declaration) & ts.ModifierFlags.Ambient) ===
+        0,
+  );
+}
 /** Known Node factory uses need a direct binding and the original source file as base. */
 export function factoryGap(
   node: ts.Node,
@@ -136,7 +146,8 @@ export function commonJsLoader(
   if (!ts.isIdentifier(expression)) return false;
   const declarations =
     checker.getSymbolAtLocation(expression)?.declarations ?? [];
-  if (expression.text === 'require' && declarations.length === 0) return true;
+  if (expression.text === 'require' && !hasRuntimeDeclaration(declarations))
+    return true;
   return declarations.some(
     (declaration) =>
       ts.isVariableDeclaration(declaration) &&
