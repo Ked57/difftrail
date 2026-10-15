@@ -1,6 +1,7 @@
-import { spawnSync } from 'node:child_process';
-import { realpath, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { repository } from './helpers.js';
 const executable = resolve('packages/cli/dist/cli.js');
@@ -21,7 +22,19 @@ test('built CLI returns exact latest-commit consumers as text and JSON from dirt
     const base = repo.git('rev-parse', 'HEAD');
     const head = await repo.commit({ 'leaf.js': 'export const leaf=2;' });
     await writeFile(resolve(repo.root, 'leaf.js'), 'not valid JavaScript !');
+    await writeFile(
+      resolve(repo.root, 'independent.js'),
+      'export const independent=2;',
+    );
+    repo.git('add', 'independent.js');
+    await writeFile(
+      resolve(repo.root, 'untracked.js'),
+      'export const local=1;',
+    );
     const before = repo.git('status', '--porcelain=v1');
+    const index = repo.git('write-tree');
+    const refs = repo.git('show-ref');
+    const config = repo.git('config', '--local', '--list');
     const result = cli(repo.root);
     expect({
       status: result.status,
@@ -41,6 +54,210 @@ test('built CLI returns exact latest-commit consumers as text and JSON from dirt
       removed: [],
     });
     expect(repo.git('status', '--porcelain=v1')).toBe(before);
+    expect(repo.git('write-tree')).toBe(index);
+    expect(repo.git('show-ref')).toBe(refs);
+    expect(repo.git('config', '--local', '--list')).toBe(config);
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI compares explicit endpoints by their net tree difference', async () => {
+  const repo = await repository({ 'value.js': 'export const value=1;' });
+  try {
+    const base = repo.git('rev-parse', 'HEAD');
+    await repo.commit({ 'value.js': 'export const value=2;' });
+    const head = await repo.commit({ 'value.js': 'export const value=1;' });
+    const result = cli(repo.root, '--base', base, '--head', head, '--json');
+    expect({
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    }).toEqual({
+      status: 0,
+      stdout:
+        JSON.stringify({
+          root: await realpath(repo.root),
+          base,
+          head,
+          scope: 'static',
+          files: [],
+          removed: [],
+        }) + '\n',
+      stderr: '',
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI treats a genuine root as an empty base snapshot', async () => {
+  const repo = await repository({
+    'README.md': 'root',
+    'src/only.js': 'export const x=1;',
+  });
+  try {
+    const head = repo.git('rev-parse', 'HEAD');
+    expect(cli(repo.root).stdout).toBe('README.md\nsrc/only.js\n');
+    expect(JSON.parse(cli(repo.root, '--json').stdout)).toMatchObject({
+      base: null,
+      head,
+      files: ['README.md', 'src/only.js'],
+      removed: [],
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI uses only a merge commit first parent for the default comparison', async () => {
+  const repo = await repository({
+    'first.js': 'export const x=1;',
+    'second.js': 'export const y=1;',
+  });
+  try {
+    const main = repo.git('branch', '--show-current');
+    const root = repo.git('rev-parse', 'HEAD');
+    repo.git('branch', 'side', root);
+    await repo.commit({ 'first.js': 'export const x=2;' });
+    repo.git('checkout', 'side');
+    await repo.commit({ 'second.js': 'export const y=2;' });
+    repo.git('checkout', main);
+    repo.git('merge', '--no-ff', '--no-edit', 'side');
+    expect(cli(repo.root).stdout).toBe('second.js\n');
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI reports a deleted seed as removed and keeps its base consumer', async () => {
+  const repo = await repository({
+    'old.js': 'export const value=1;',
+    'page.js': "import {value} from './old.js'; export {value};",
+  });
+  try {
+    const base = repo.git('rev-parse', 'HEAD');
+    repo.git('rm', 'old.js');
+    const head = await repo.commit({ 'page.js': 'export const value=1;' });
+    expect(
+      JSON.parse(
+        cli(repo.root, '--base', base, '--head', head, '--json').stdout,
+      ),
+    ).toMatchObject({
+      base,
+      head,
+      files: ['page.js'],
+      removed: ['old.js'],
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI retains both rename names as seeds and presents the removed old path', async () => {
+  const repo = await repository({
+    'old.js': 'export const value=1;',
+    'page.js': "import {value} from './old.js'; export {value};",
+  });
+  try {
+    const base = repo.git('rev-parse', 'HEAD');
+    repo.git('mv', 'old.js', 'new.js');
+    const head = await repo.commit({
+      'new.js': 'export const value=1;',
+      'page.js': "import {value} from './new.js'; export {value};",
+    });
+    expect(
+      JSON.parse(
+        cli(repo.root, '--base', base, '--head', head, '--json').stdout,
+      ),
+    ).toMatchObject({
+      files: ['new.js', 'page.js'],
+      removed: ['old.js'],
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI uses an explicit merge base only when requested', async () => {
+  const repo = await repository({ 'root.js': 'export const root=1;' });
+  try {
+    const branch = repo.git('branch', '--show-current');
+    const root = repo.git('rev-parse', 'HEAD');
+    repo.git('branch', 'side', root);
+    repo.git('checkout', 'side');
+    const side = await repo.commit({ 'side.js': 'export const side=1;' });
+    repo.git('checkout', branch);
+    const head = await repo.commit({ 'main.js': 'export const main=1;' });
+    expect(
+      JSON.parse(
+        cli(repo.root, '--base', side, '--head', head, '--json').stdout,
+      ),
+    ).toMatchObject({
+      files: ['main.js'],
+      removed: ['side.js'],
+    });
+    expect(
+      JSON.parse(
+        cli(repo.root, '--base', side, '--head', head, '--merge-base', '--json')
+          .stdout,
+      ),
+    ).toMatchObject({
+      files: ['main.js'],
+      removed: [],
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI rejects unavailable default history but accepts explicit shallow endpoints', async () => {
+  const repo = await repository({ 'value.js': 'export const value=1;' });
+  const clone = await mkdtemp(join(tmpdir(), 'difftrail-shallow-'));
+  try {
+    const base = repo.git('rev-parse', 'HEAD');
+    const head = await repo.commit({ 'value.js': 'export const value=2;' });
+    execFileSync('git', [
+      'clone',
+      '--quiet',
+      '--depth=1',
+      `file://${repo.root}`,
+      clone,
+    ]);
+    const unavailable = cli(clone);
+    expect(unavailable.status).toBe(1);
+    expect(unavailable.stdout).toBe('');
+    expect(unavailable.stderr).toContain('first parent');
+    const explicit = cli(clone, '--base', head, '--head', head);
+    expect({ status: explicit.status, stdout: explicit.stdout }).toEqual({
+      status: 0,
+      stdout: '',
+    });
+    const absent = cli(clone, '--base', base, '--head', head);
+    expect(absent.status).toBe(1);
+    expect(absent.stdout).toBe('');
+  } finally {
+    await rm(clone, { recursive: true, force: true });
+    await repo.cleanup();
+  }
+});
+
+test('built CLI validates comparison flag combinations and unresolved refs atomically', async () => {
+  const repo = await repository({ 'only.js': 'export const value=1;' });
+  try {
+    for (const args of [
+      ['--head', 'HEAD'],
+      ['--merge-base'],
+      ['--base'],
+      ['--json', '--json'],
+    ]) {
+      const invalid = cli(repo.root, ...args);
+      expect(invalid.status).toBe(2);
+      expect(invalid.stdout).toBe('');
+    }
+    const unavailable = cli(repo.root, '--base', 'no-such-ref', '--json');
+    expect(unavailable.status).toBe(1);
+    expect(unavailable.stdout).toBe('');
   } finally {
     await repo.cleanup();
   }
