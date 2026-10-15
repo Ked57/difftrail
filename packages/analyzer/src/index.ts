@@ -1,5 +1,4 @@
-import { isAbsolute, relative, resolve } from 'node:path';
-import { realpath } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { cruise, type IModule } from 'dependency-cruiser';
 import { TsconfigPathsPlugin } from 'tsconfig-paths-webpack-plugin';
 import ts from 'typescript';
@@ -7,19 +6,23 @@ import type { DependencyEdge } from '@difftrail/core';
 import type { Snapshot } from '@difftrail/git';
 import { groupSourcesByConfig } from './contexts.js';
 import { aliasMatches, parseSnapshotConfig } from './config.js';
-import {
-  prepareWorkspaces,
-  workspaceConsumerManifest,
-  workspaceForSpecifier,
-} from './workspaces.js';
-import { externalEvidenceFor, prepareExternalEvidence } from './external.js';
+import { prepareWorkspaces, workspaceForSpecifier } from './workspaces.js';
+import { prepareExternalEvidence, type ExternalEvidence } from './external.js';
 import { externalEvidenceGap } from './external-errors.js';
+import {
+  configProviderEdges,
+  configRootsForSources,
+  includeConfigSpecifiers,
+  prepareConfigProviderEvidence,
+  type ConfigProviderReference,
+} from './external-config.js';
+import type { ValidatedConfigRoot } from './config.js';
 import { autoImportEdges } from './auto-imports.js';
 import { localReferenceEdges } from './local.js';
 import { analysisGap as gap } from './errors.js';
+import { resolvedEdges } from './resolved-edges.js';
 import {
   inspectSources,
-  isCommonJsRelationship,
   supportedSourcePattern,
   type SourceInspection,
 } from './source.js';
@@ -38,6 +41,7 @@ async function extractModules(
   snapshot: Snapshot,
   sources: readonly string[],
   requiredSpecifiers: ReadonlyMap<string, SourceInspection>,
+  configRootsBySource: ReadonlyMap<string, readonly ValidatedConfigRoot[]>,
 ): Promise<{
   modules: ResolvedModule[];
   configurationEdges: DependencyEdge[];
@@ -46,7 +50,12 @@ async function extractModules(
   const configurationEdges: DependencyEdge[] = [];
   for (const group of groupSourcesByConfig(snapshot, sources)) {
     try {
-      const result = await extractGroup(snapshot, group, requiredSpecifiers);
+      const result = await extractGroup(
+        snapshot,
+        group,
+        requiredSpecifiers,
+        configRootsForSources(group.sources, configRootsBySource),
+      );
       extracted.push(...result.modules);
       configurationEdges.push(...result.configurationEdges);
     } catch (error) {
@@ -66,6 +75,7 @@ async function extractGroup(
   snapshot: Snapshot,
   group: ReturnType<typeof groupSourcesByConfig>[number],
   requiredSpecifiers: ReadonlyMap<string, SourceInspection>,
+  externalPackageRoots: readonly ValidatedConfigRoot[],
 ): Promise<{
   modules: ResolvedModule[];
   configurationEdges: DependencyEdge[];
@@ -74,7 +84,7 @@ async function extractGroup(
     ? resolve(snapshot.directory, group.configPath)
     : undefined;
   const config = group.configPath
-    ? parseSnapshotConfig(snapshot, group.configPath)
+    ? parseSnapshotConfig(snapshot, group.configPath, externalPackageRoots)
     : undefined;
   const plugin =
     configFile && config
@@ -165,23 +175,36 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
   const sources = snapshot.paths.filter((file) =>
     supportedSourcePattern.test(file),
   );
-  const localEdges = await localReferenceEdges(
-    snapshot,
-    sources,
-    requiredSpecifiers,
-  );
-  const autoImports = await autoImportEdges(snapshot);
-  if (sources.length === 0)
+  if (sources.length === 0) {
+    const localEdges = await localReferenceEdges(
+      snapshot,
+      sources,
+      requiredSpecifiers,
+    );
+    const autoImports = await autoImportEdges(snapshot);
     return {
       revision: snapshot.revision,
       edges: [...localEdges, ...autoImports],
     };
+  }
   const resolution = await prepareResolution(
     snapshot,
     sources,
     requiredSpecifiers,
   );
-  const extracted = await extractModules(snapshot, sources, requiredSpecifiers);
+  const localEdges = await localReferenceEdges(
+    snapshot,
+    sources,
+    requiredSpecifiers,
+    resolution.configRootsBySource,
+  );
+  const autoImports = await autoImportEdges(snapshot);
+  const extracted = await extractModules(
+    snapshot,
+    sources,
+    requiredSpecifiers,
+    resolution.configRootsBySource,
+  );
   const edges = await resolvedEdges(
     snapshot,
     extracted.modules,
@@ -189,13 +212,21 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
     resolution,
   );
   edges.push(...extracted.configurationEdges, ...localEdges);
+  edges.push(
+    ...configProviderEdges(resolution.external, resolution.configExtends),
+  );
   edges.push(...autoImports);
   return { revision: snapshot.revision, edges };
 }
 
 interface ResolutionEvidence {
   readonly workspaces: Awaited<ReturnType<typeof prepareWorkspaces>>;
-  readonly external: Awaited<ReturnType<typeof prepareExternalEvidence>>;
+  readonly external: ExternalEvidence;
+  readonly configRootsBySource: ReadonlyMap<
+    string,
+    readonly ValidatedConfigRoot[]
+  >;
+  readonly configExtends: readonly ConfigProviderReference[];
 }
 
 async function prepareResolution(
@@ -210,7 +241,7 @@ async function prepareResolution(
     requiredSpecifiers,
     workspaces,
   );
-  return { workspaces, external };
+  return { workspaces, ...external };
 }
 
 async function prepareWorkspaceEvidence(
@@ -232,17 +263,36 @@ async function prepareInstalledEvidence(
   sources: readonly string[],
   requiredSpecifiers: ReadonlyMap<string, SourceInspection>,
   workspaces: Awaited<ReturnType<typeof prepareWorkspaces>>,
-): Promise<Awaited<ReturnType<typeof prepareExternalEvidence>>> {
+): Promise<
+  Pick<ResolutionEvidence, 'external' | 'configRootsBySource' | 'configExtends'>
+> {
   try {
-    const aliases = configuredAliases(snapshot, sources);
-    const specifiers = externalSpecifiers(
+    const configEvidence = await prepareConfigProviderEvidence(
+      snapshot,
       sources,
-      requiredSpecifiers,
-      workspaces,
-      aliases,
     );
-    return await prepareExternalEvidence(snapshot, sources, specifiers);
+    const aliases = configuredAliases(
+      snapshot,
+      sources,
+      configEvidence.rootsBySource,
+    );
+    const specifiers = includeConfigSpecifiers(
+      externalSpecifiers(sources, requiredSpecifiers, workspaces, aliases),
+      configEvidence.specifiers,
+    );
+    const external = await prepareExternalEvidence(
+      snapshot,
+      sources,
+      specifiers,
+    );
+    return {
+      external,
+      configRootsBySource: configEvidence.rootsBySource,
+      configExtends: configEvidence.references,
+    };
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Analysis gap'))
+      throw error;
     throw externalEvidenceGap(snapshot, error);
   }
 }
@@ -250,14 +300,29 @@ async function prepareInstalledEvidence(
 function configuredAliases(
   snapshot: Snapshot,
   sources: readonly string[],
+  configRootsBySource: ReadonlyMap<string, readonly ValidatedConfigRoot[]>,
 ): Map<string, readonly string[]> {
   const result = new Map<string, readonly string[]>();
   for (const group of groupSourcesByConfig(snapshot, sources)) {
     if (!group.configPath) continue;
-    const aliases = Object.keys(
-      parseSnapshotConfig(snapshot, group.configPath).parsed.options.paths ??
-        {},
-    );
+    let aliases: string[];
+    try {
+      aliases = Object.keys(
+        parseSnapshotConfig(
+          snapshot,
+          group.configPath,
+          configRootsForSources(group.sources, configRootsBySource),
+        ).parsed.options.paths ?? {},
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Analysis gap'))
+        throw error;
+      throw gap(
+        snapshot,
+        group.sources.join(', '),
+        `${group.configPath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     for (const source of group.sources) result.set(source, aliases);
   }
   return result;
@@ -283,234 +348,4 @@ function externalSpecifiers(
         ),
     ]),
   );
-}
-
-async function resolvedEdges(
-  snapshot: Snapshot,
-  modules: readonly ResolvedModule[],
-  inspections: ReadonlyMap<string, SourceInspection>,
-  resolution: ResolutionEvidence,
-): Promise<DependencyEdge[]> {
-  const tracked = new Set(snapshot.paths);
-  const edges: DependencyEdge[] = [];
-  for (const resolvedModule of modules) {
-    const importer = repositoryPath(snapshot, resolvedModule.module.source);
-    if (!tracked.has(importer)) continue;
-    const dependencies = resolvedRelationships(
-      resolvedModule,
-      importer,
-      inspections,
-    );
-    for (const dependency of dependencies)
-      edges.push(
-        ...(await dependencyEdges(
-          snapshot,
-          importer,
-          dependency,
-          inspections,
-          resolution,
-          tracked,
-        )),
-      );
-  }
-  return edges;
-}
-
-function repositoryPath(snapshot: Snapshot, path: string): string {
-  return relative(
-    snapshot.directory,
-    isAbsolute(path) ? path : resolve(snapshot.directory, path),
-  )
-    .split('\\')
-    .join('/');
-}
-
-function resolvedRelationships(
-  resolved: ResolvedModule,
-  importer: string,
-  inspections: ReadonlyMap<string, SourceInspection>,
-): IModule['dependencies'] {
-  return resolved.module.dependencies.filter((dependency) =>
-    inspections
-      .get(importer)
-      ?.relationships.some(
-        (relationship) =>
-          relationship.specifier === dependency.module &&
-          (isCommonJsRelationship(relationship.kind) ? 'cjs' : 'es6') ===
-            dependency.moduleSystem &&
-          resolved.condition ===
-            (dependency.moduleSystem === 'cjs' ? 'require' : 'import'),
-      ),
-  );
-}
-
-async function dependencyEdges(
-  snapshot: Snapshot,
-  importer: string,
-  dependency: IModule['dependencies'][number],
-  inspections: ReadonlyMap<string, SourceInspection>,
-  resolution: ResolutionEvidence,
-  tracked: ReadonlySet<string>,
-): Promise<DependencyEdge[]> {
-  if (dependency.couldNotResolve)
-    throw gap(snapshot, importer, `cannot resolve ${dependency.module}`);
-  if (dependency.coreModule || dependency.dependencyTypes.includes('core'))
-    return [];
-  const external = externalEvidenceFor(
-    resolution.external,
-    importer,
-    dependency.module,
-  );
-  const target = repositoryPath(snapshot, dependency.resolved);
-  if (!tracked.has(target) && external)
-    return externalMetadataEdges(
-      snapshot,
-      importer,
-      dependency.module,
-      dependency.resolved,
-      external,
-      inspections,
-    );
-  if (!tracked.has(target))
-    throw gap(
-      snapshot,
-      importer,
-      `required dependency ${dependency.module} is absent from committed snapshot`,
-    );
-  return localDependencyEdges(
-    snapshot,
-    importer,
-    dependency,
-    target,
-    inspections,
-    resolution.workspaces,
-  );
-}
-
-async function externalMetadataEdges(
-  snapshot: Snapshot,
-  importer: string,
-  specifier: string,
-  resolvedPath: string,
-  external: NonNullable<ReturnType<typeof externalEvidenceFor>>,
-  inspections: ReadonlyMap<string, SourceInspection>,
-): Promise<DependencyEdge[]> {
-  await assertInstalledTarget(
-    snapshot,
-    importer,
-    specifier,
-    resolvedPath,
-    external,
-  );
-  return (inspections.get(importer)?.relationships ?? [])
-    .filter((item) => item.specifier === specifier)
-    .flatMap((relationship) =>
-      [external.manifest, external.lockfile].map((metadata) => ({
-        importer,
-        dependency: metadata,
-        specifier: relationship.specifier,
-        kind: 'metadata',
-      })),
-    );
-}
-
-async function assertInstalledTarget(
-  snapshot: Snapshot,
-  importer: string,
-  specifier: string,
-  resolvedPath: string,
-  external: NonNullable<ReturnType<typeof externalEvidenceFor>>,
-): Promise<void> {
-  const installedPackage = await realpath(external.packageRoot);
-  const resolvedFile = await realpath(
-    isAbsolute(resolvedPath)
-      ? resolvedPath
-      : resolve(snapshot.directory, resolvedPath),
-  );
-  if (!isWithin(installedPackage, resolvedFile))
-    throw gap(
-      snapshot,
-      importer,
-      `resolved ${specifier} outside its proven installed package`,
-    );
-}
-
-function isWithin(parent: string, target: string): boolean {
-  const local = relative(parent, target);
-  return (
-    local !== '..' &&
-    !local.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) &&
-    !isAbsolute(local)
-  );
-}
-
-async function localDependencyEdges(
-  snapshot: Snapshot,
-  importer: string,
-  dependency: IModule['dependencies'][number],
-  target: string,
-  inspections: ReadonlyMap<string, SourceInspection>,
-  workspaces: Awaited<ReturnType<typeof prepareWorkspaces>>,
-): Promise<DependencyEdge[]> {
-  const relationships =
-    inspections
-      .get(importer)
-      ?.relationships.filter(
-        (item) =>
-          item.specifier === dependency.module &&
-          (isCommonJsRelationship(item.kind) ? 'cjs' : 'es6') ===
-            dependency.moduleSystem,
-      ) ?? [];
-  if (!relationships.length)
-    throw gap(
-      snapshot,
-      importer,
-      `extractor relationship ${dependency.module} has no supported source syntax`,
-    );
-  const edges = relationships.map((relationship) => ({
-    importer,
-    dependency: target,
-    specifier: relationship.specifier,
-    kind: relationship.kind,
-  }));
-  const workspace = workspaceForSpecifier(
-    workspaces.packages,
-    dependency.module,
-  );
-  if (!workspace || !target.startsWith(`${workspace.directory}/`)) return edges;
-  const consumer = await checkedWorkspaceConsumer(
-    snapshot,
-    importer,
-    workspace,
-  );
-  const metadata = [
-    ...workspaces.membershipFiles,
-    workspace.manifest,
-    consumer,
-  ];
-  return [
-    ...edges,
-    ...metadata.map((dependencyPath) => ({
-      importer,
-      dependency: dependencyPath,
-      specifier: dependency.module,
-      kind: 'metadata',
-    })),
-  ];
-}
-
-async function checkedWorkspaceConsumer(
-  snapshot: Snapshot,
-  importer: string,
-  workspace: Parameters<typeof workspaceConsumerManifest>[2],
-): Promise<string> {
-  try {
-    return workspaceConsumerManifest(snapshot, importer, workspace);
-  } catch (error) {
-    throw gap(
-      snapshot,
-      importer,
-      error instanceof Error ? error.message : String(error),
-    );
-  }
 }
