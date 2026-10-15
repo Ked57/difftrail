@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["tests/**/*.test.ts"],
+      "project": ["*.config.ts", "tools/*.mjs", "tests/**/*.ts"]
+    },
+    "packages/core": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/git": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/analyzer": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/cli": {
+      "entry": ["src/cli.ts", "tests/parser-smoke.mjs"],
+      "project": ["src/**/*.ts", "tests/**/*.mjs"]
+    },
+    "apps/*": {}
+  }
+}

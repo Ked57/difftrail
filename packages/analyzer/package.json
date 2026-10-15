@@ -1,0 +1,16 @@
+{
+  "name": "@difftrail/analyzer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "build": "esbuild src/index.ts --outdir=dist --platform=node --format=esm --packages=external"
+  },
+  "dependencies": {
+    "@difftrail/core": "workspace:*",
+    "@difftrail/git": "workspace:*",
+    "dependency-cruiser": "18.6.0",
+    "typescript": "6.0.3"
+  }
+}
