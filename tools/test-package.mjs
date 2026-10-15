@@ -166,6 +166,129 @@ try {
   assert.equal(invalidVue.status, 1);
   assert.equal(invalidVue.stdout, '');
   assert.ok(invalidVue.stderr.includes('Page.vue'));
+  const autoImportFixture = join(temporary, 'auto-import-repository');
+  await mkdir(autoImportFixture);
+  run('git', ['init', '--quiet'], autoImportFixture);
+  run(
+    'git',
+    ['config', 'user.email', 'fixture@example.invalid'],
+    autoImportFixture,
+  );
+  run('git', ['config', 'user.name', 'Fixture'], autoImportFixture);
+  const pluginRecord = {
+    version: '1.0.0',
+    resolved:
+      'https://registry.npmjs.org/unplugin-vue-components/-/unplugin-vue-components-1.0.0.tgz',
+    integrity: 'sha512-fixture',
+  };
+  const pluginLock = {
+    lockfileVersion: 3,
+    packages: {
+      '': {
+        devDependencies: { 'unplugin-vue-components': '1.0.0' },
+      },
+      'node_modules/unplugin-vue-components': pluginRecord,
+    },
+  };
+  await writeFile(
+    join(autoImportFixture, 'package.json'),
+    JSON.stringify({
+      private: true,
+      devDependencies: { 'unplugin-vue-components': '1.0.0' },
+    }),
+  );
+  await writeFile(
+    join(autoImportFixture, 'package-lock.json'),
+    JSON.stringify(pluginLock),
+  );
+  const pluginRoot = join(
+    autoImportFixture,
+    'node_modules/unplugin-vue-components',
+  );
+  await mkdir(pluginRoot, { recursive: true });
+  await writeFile(
+    join(pluginRoot, 'package.json'),
+    JSON.stringify({
+      name: 'unplugin-vue-components',
+      version: '1.0.0',
+      main: 'index.js',
+    }),
+  );
+  await writeFile(join(pluginRoot, 'index.js'), 'module.exports = () => ({});');
+  await writeFile(
+    join(autoImportFixture, 'node_modules/.package-lock.json'),
+    JSON.stringify(pluginLock),
+  );
+  /** @param {string} target */
+  const declaration = (target) =>
+    [
+      "declare module 'vue' {",
+      '  export interface GlobalComponents {',
+      `    AutoButton: typeof import('${target}')['default']`,
+      '  }',
+      '}',
+    ].join('\n');
+  /** @param {Record<string, string>} files @param {string} message */
+  const commitAutoImport = async (files, message) => {
+    for (const [path, contents] of Object.entries(files)) {
+      await mkdir(join(autoImportFixture, path, '..'), { recursive: true });
+      await writeFile(join(autoImportFixture, path), contents);
+    }
+    run('git', ['add', '--all'], autoImportFixture);
+    run('git', ['commit', '--quiet', '-m', message], autoImportFixture);
+    return run('git', ['rev-parse', 'HEAD'], autoImportFixture).trim();
+  };
+  await commitAutoImport(
+    {
+      'vite.config.mjs': [
+        "import Components from 'unplugin-vue-components';",
+        "export default Components({ dts: 'generated/components.d.ts' });",
+      ].join('\n'),
+      'generated/components.d.ts': declaration('../src/AutoButton.vue'),
+      'src/AutoButton.vue': '<template><button>Mapped</button></template>',
+      'elsewhere/AutoButton.vue':
+        '<template><button>Same name</button></template>',
+      'pages/checkout.vue': '<template><AutoButton /></template>',
+    },
+    'baseline auto-import mapping',
+  );
+  await commitAutoImport(
+    {
+      'generated/components.d.ts': declaration('../elsewhere/AutoButton.vue'),
+    },
+    'change only the auto-import mapping',
+  );
+  assert.equal(
+    run(bin, [], autoImportFixture),
+    'generated/components.d.ts\npages/checkout.vue\n',
+  );
+  const headGap = await commitAutoImport(
+    { 'pages/checkout.vue': '<template><RemoteWidget /></template>' },
+    'introduce a runtime-only auto-import gap',
+  );
+  const headGapResult = spawnSync(
+    process.execPath,
+    [join(packageRoot, 'dist', 'cli.js')],
+    { cwd: autoImportFixture, encoding: 'utf8' },
+  );
+  assert.equal(headGapResult.status, 1);
+  assert.equal(headGapResult.stdout, '');
+  assert.ok(headGapResult.stderr.includes('RemoteWidget'));
+  await commitAutoImport(
+    { 'pages/checkout.vue': '<template><AutoButton /></template>' },
+    'repair the runtime-only auto-import gap',
+  );
+  const baseGapResult = spawnSync(
+    process.execPath,
+    [join(packageRoot, 'dist', 'cli.js'), '--base', headGap, '--head', 'HEAD'],
+    { cwd: autoImportFixture, encoding: 'utf8' },
+  );
+  assert.equal(baseGapResult.status, 1);
+  assert.equal(baseGapResult.stdout, '');
+  assert.ok(
+    baseGapResult.stderr.includes('RemoteWidget'),
+    baseGapResult.stderr,
+  );
   const pnpmConsumer = join(temporary, 'pnpm-consumer');
   await mkdir(pnpmConsumer);
   await writeFile(

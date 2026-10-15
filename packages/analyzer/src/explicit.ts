@@ -210,26 +210,33 @@ function callRelationships(
 }
 
 export function templateReferences(source: string): SourceRelationship[] {
+  return templateElements(source).flatMap((node) =>
+    node.props
+      .map((prop) => templateAssetReference(node, prop))
+      .filter((reference) => reference !== undefined),
+  );
+}
+
+export function templateComponentNames(source: string): string[] {
+  return templateElements(source).map((node) => node.tag);
+}
+
+function templateElements(source: string): ElementNode[] {
   const errors: unknown[] = [];
   const ast = parseTemplate(source, {
     comments: false,
     onError: (error) => errors.push(error),
   });
   if (errors.length) throw new Error(errors.map(errorMessage).join('; '));
-  const relationships: SourceRelationship[] = [];
+  const elements: ElementNode[] = [];
   const pending: TemplateChildNode[] = [...ast.children];
   while (pending.length) {
     const node = pending.pop();
     if (!node) continue;
-    if (node.type === NodeTypes.ELEMENT)
-      relationships.push(
-        ...node.props
-          .map((prop) => templateAssetReference(node, prop))
-          .filter((reference) => reference !== undefined),
-      );
+    if (node.type === NodeTypes.ELEMENT) elements.push(node);
     pending.push(...templateChildren(node));
   }
-  return relationships;
+  return elements;
 }
 
 function templateAssetReference(

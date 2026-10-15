@@ -7,6 +7,15 @@ export interface SnapshotConfig {
   readonly files: readonly string[];
 }
 
+export function aliasMatches(pattern: string, specifier: string): boolean {
+  const wildcard = pattern.indexOf('*');
+  if (wildcard < 0) return pattern === specifier;
+  return (
+    specifier.startsWith(pattern.slice(0, wildcard)) &&
+    specifier.endsWith(pattern.slice(wildcard + 1))
+  );
+}
+
 function repositoryPath(snapshot: Snapshot, file: string): string | null {
   const local = relative(snapshot.directory, resolve(file));
   if (local === '..' || local.startsWith(`..${sep}`) || isAbsolute(local))
