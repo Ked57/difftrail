@@ -51,6 +51,30 @@ test.each([
   ['missing require', "require('./missing.js');"],
   ['variable import', 'const name="./leaf.js"; import(name);'],
   ['variable require', 'const name="./leaf.js"; require(name);'],
+  [
+    'factory missing require',
+    "import {createRequire} from 'node:module';const require=createRequire(import.meta.url);require('./missing.cjs');",
+  ],
+  [
+    'factory variable require',
+    "import {createRequire} from 'node:module';const require=createRequire(import.meta.url);const target='./leaf.js';require(target);",
+  ],
+  [
+    'factory unsupported base',
+    "import {createRequire} from 'node:module';const require=createRequire('/different/owner.cjs');require('./leaf.js');",
+  ],
+  [
+    'factory passed as value',
+    "import {createRequire} from 'node:module';const factory=createRequire;const require=factory(import.meta.url);require('./leaf.js');",
+  ],
+  [
+    'CommonJS factory unsupported base',
+    "const {createRequire}=require('node:module');const load=createRequire(__filename);load('./leaf.js');",
+  ],
+  [
+    'namespace factory unsupported base',
+    "import nodeModule from 'module';const require=nodeModule.createRequire(new URL('../other.cjs',import.meta.url));require('./leaf.js');",
+  ],
   ['invalid JavaScript', 'const = ;'],
 ])('fails atomically on %s in either endpoint', async (_name, source) => {
   const repo = await repository({
@@ -99,6 +123,25 @@ test('built CLI accepts ordinary changes that use a local require helper', async
       stdout: result.stdout,
       stderr: result.stderr,
     }).toEqual({ status: 0, stdout: 'consumer.js\n', stderr: '' });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI returns the consumer of a Node createRequire loader', async () => {
+  const repo = await repository({
+    'leaf.cjs': 'module.exports=1;',
+    'consumer.mjs':
+      "import {createRequire} from 'node:module';const require=createRequire(import.meta.url);export const value=require('./leaf.cjs');",
+  });
+  try {
+    await repo.commit({ 'leaf.cjs': 'module.exports=2;' });
+    const result = cli(repo.root);
+    expect({
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    }).toEqual({ status: 0, stdout: 'consumer.mjs\nleaf.cjs\n', stderr: '' });
   } finally {
     await repo.cleanup();
   }

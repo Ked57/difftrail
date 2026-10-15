@@ -88,6 +88,8 @@ test('distinguishes lexically bound require helpers from genuine CommonJS import
   const repo = await repository({
     'leaf.cjs': 'module.exports=1;',
     'loader.js': 'export function loader(value) {return value;}',
+    'factory-helper.js':
+      "function createRequire() {return value=>value;} const require=createRequire();const target='plain';export const value=require(target);require('./not-a-module.js');",
     'local.js':
       "function require(value) {return value;} const input='local'; export const value=require(input); require('./not-a-module.js');",
     'block.cjs':
@@ -106,6 +108,33 @@ test('distinguishes lexically bound require helpers from genuine CommonJS import
         ['block.cjs', 'leaf.cjs'],
         ['imported.js', 'loader.js'],
         ['parameter.cjs', 'leaf.cjs'],
+      ]);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('retains Node createRequire bindings with the owning import.meta.url base', async () => {
+  const repo = await repository({
+    'leaf.cjs': 'module.exports=1;',
+    'sub/leaf.cjs': 'module.exports=2;',
+    'sub/consumer.mjs':
+      "import {createRequire as makeRequire} from 'module'; const require=makeRequire(import.meta.url); export const value=require('./leaf.cjs');",
+    'default.mjs':
+      "import nodeModule from 'node:module';const require=nodeModule['createRequire'](import.meta.url);export const value=require('./leaf.cjs');",
+    'alias.mjs':
+      "import * as nodeModule from 'node:module'; const load=nodeModule.createRequire(import.meta.url); export const value=load('./leaf.cjs');",
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(
+        graph.edges.map((edge) => [edge.importer, edge.dependency]).sort(),
+      ).toEqual([
+        ['alias.mjs', 'leaf.cjs'],
+        ['default.mjs', 'leaf.cjs'],
+        ['sub/consumer.mjs', 'sub/leaf.cjs'],
       ]);
     });
   } finally {

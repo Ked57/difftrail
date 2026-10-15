@@ -3,6 +3,12 @@ import { cruise } from 'dependency-cruiser';
 import ts from 'typescript';
 import type { DependencyEdge } from '@difftrail/core';
 import type { Snapshot } from '@difftrail/git';
+import { commonJsLoader, factoryGap } from './require.js';
+
+interface SourceInspection {
+  readonly specifiers: ReadonlySet<string>;
+  readonly loaderNames: ReadonlySet<string>;
+}
 
 export interface SnapshotGraph {
   readonly revision: string | null;
@@ -16,14 +22,15 @@ function gap(snapshot: Snapshot, file: string, reason: string): Error {
 async function inspectSource(
   snapshot: Snapshot,
   file: string,
-): Promise<ReadonlySet<string>> {
+): Promise<SourceInspection> {
   if (/\.(?:[cm]?tsx?|jsx|vue|css|scss|sass|less)$/.test(file))
     throw gap(
       snapshot,
       file,
       'required syntax is not supported by this release yet',
     );
-  if (!/\.(?:c|m)?js$/.test(file)) return new Set();
+  if (!/\.(?:c|m)?js$/.test(file))
+    return { specifiers: new Set(), loaderNames: new Set() };
   const filename = resolve(snapshot.directory, file);
   const program = ts.createProgram([filename], {
     allowJs: true,
@@ -46,14 +53,13 @@ async function inspectSource(
     );
   const checker = program.getTypeChecker();
   const requiredSpecifiers = new Set<string>();
+  const loaderNames = new Set<string>();
   function visit(node: ts.Node): void {
+    const unsupportedFactory = factoryGap(node, checker);
+    if (unsupportedFactory) throw gap(snapshot, file, unsupportedFactory);
     if (ts.isCallExpression(node)) {
       const expression = node.expression;
-      // TypeScript synthesizes an unbound CommonJS symbol without source declarations.
-      const commonJsRequire =
-        ts.isIdentifier(expression) &&
-        expression.text === 'require' &&
-        !checker.getSymbolAtLocation(expression)?.declarations?.length;
+      const commonJsRequire = commonJsLoader(expression, checker);
       if (expression.kind === ts.SyntaxKind.ImportKeyword || commonJsRequire) {
         const first = node.arguments[0];
         if (!first || !ts.isStringLiteralLike(first))
@@ -62,17 +68,20 @@ async function inspectSource(
             file,
             'non-literal dependency requires static resolution',
           );
-        if (commonJsRequire) requiredSpecifiers.add(first.text);
+        if (commonJsRequire && ts.isIdentifier(expression)) {
+          requiredSpecifiers.add(first.text);
+          if (expression.text !== 'require') loaderNames.add(expression.text);
+        }
       }
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
-  return requiredSpecifiers;
+  return { specifiers: requiredSpecifiers, loaderNames };
 }
 /** Extract each snapshot independently with tool-owned parsers; never executes project configuration. */
 export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
-  const requiredSpecifiers = new Map<string, ReadonlySet<string>>();
+  const requiredSpecifiers = new Map<string, SourceInspection>();
   for (const file of snapshot.paths)
     requiredSpecifiers.set(file, await inspectSource(snapshot, file));
   const sources = snapshot.paths.filter((file) => /\.(?:c|m)?js$/.test(file));
@@ -83,6 +92,13 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
       await cruise(sources, {
         baseDir: snapshot.directory,
         tsPreCompilationDeps: true,
+        exoticRequireStrings: [
+          ...new Set(
+            [...requiredSpecifiers.values()].flatMap((source) => [
+              ...source.loaderNames,
+            ]),
+          ),
+        ],
         exclude: [],
         doNotFollow: { path: '.*' },
       })
@@ -108,12 +124,11 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
   for (const module of output.modules) {
     const importer = normalize(module.source);
     if (!tracked.has(importer)) continue;
-    // Cruiser recognizes call spelling; lexical declarations identify actual CommonJS calls.
+    // Keep only lexically established loaders, including explicit Node createRequire bindings.
     const dependencies = module.dependencies.filter(
       (dependency) =>
         dependency.moduleSystem !== 'cjs' ||
-        dependency.exoticallyRequired ||
-        requiredSpecifiers.get(importer)?.has(dependency.module),
+        requiredSpecifiers.get(importer)?.specifiers.has(dependency.module),
     );
     for (const dependency of dependencies) {
       if (dependency.couldNotResolve)
