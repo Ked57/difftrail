@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { impactedPaths, selectImpact } from './index.js';
+import { impactedPaths, selectExplanations, selectImpact } from './index.js';
 test('retains seeds and reverse consumers through cycles without following imports', () => {
   expect(
     impactedPaths(
@@ -43,4 +43,65 @@ test('orders impacted paths independently of seed and graph insertion order', ()
   expect(
     selectImpact(['z.js', 'b.js', 'a.js', 'c.js'], [], [], ['z.js', 'a.js']),
   ).toEqual({ files: ['a.js', 'z.js'], removed: ['b.js', 'c.js'] });
+});
+
+test('chooses shortest explanation chains with stable path and endpoint ties', () => {
+  expect(
+    selectExplanations(
+      ['z-seed.js', 'a-seed.js'],
+      [
+        { importer: 'target.js', dependency: 'a-seed.js' },
+        { importer: 'target.js', dependency: 'z-seed.js' },
+        { importer: 'long.js', dependency: 'a-seed.js' },
+        { importer: 'target.js', dependency: 'long.js' },
+      ],
+      ['z-seed.js', 'a-seed.js'],
+      [
+        { importer: 'target.js', dependency: 'z-seed.js' },
+        { importer: 'target.js', dependency: 'a-seed.js' },
+      ],
+      ['target.js'],
+    ),
+  ).toEqual([
+    {
+      file: 'target.js',
+      snapshot: 'head',
+      chain: ['a-seed.js', 'target.js'],
+    },
+  ]);
+});
+
+test('keeps explanation chains inside one endpoint and orders explanation entries', () => {
+  expect(
+    selectExplanations(
+      ['a.js', 'b.js'],
+      [{ importer: 'b.js', dependency: 'a.js' }],
+      ['b.js'],
+      [{ importer: 'c.js', dependency: 'b.js' }],
+      ['c.js'],
+    ),
+  ).toEqual([{ file: 'c.js', snapshot: 'head', chain: ['b.js', 'c.js'] }]);
+});
+
+test('omits a requested explanation when neither endpoint contains a witness', () => {
+  expect(
+    selectExplanations(['seed.js'], [], ['seed.js'], [], ['outside.js']),
+  ).toEqual([]);
+});
+
+test('prefers a shorter base witness over a longer head witness', () => {
+  expect(
+    selectExplanations(
+      ['seed.js'],
+      [{ importer: 'target.js', dependency: 'seed.js' }],
+      ['seed.js'],
+      [
+        { importer: 'middle.js', dependency: 'seed.js' },
+        { importer: 'target.js', dependency: 'middle.js' },
+      ],
+      ['target.js'],
+    ),
+  ).toEqual([
+    { file: 'target.js', snapshot: 'base', chain: ['seed.js', 'target.js'] },
+  ]);
 });
