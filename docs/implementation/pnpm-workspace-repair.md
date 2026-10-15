@@ -55,8 +55,9 @@ repair.
 
 ## Checks
 
-`pnpm verify:full` passed on 2026-10-15: formatting, lint and difficulty audit,
-typecheck, 48 unit tests, 31 integration tests, isolated npm and pnpm package
-checks, and Knip. The normal-install CLI regression was also run independently
-while developing the fix; it failed with the root `node_modules/chalk` ENOENT
-under the previous lookup and passed with importer-scoped evidence.
+`pnpm verify:full` passed on 2026-10-15 after combining with the latest reviewed
+integration branch: formatting, lint and difficulty audit, typecheck, 52 unit
+tests, 36 integration tests, isolated npm and pnpm package checks, and Knip.
+The normal-install CLI regression was also run independently while developing
+the fix; it failed with the root `node_modules/chalk` ENOENT under the previous
+lookup and passed with importer-scoped evidence.
