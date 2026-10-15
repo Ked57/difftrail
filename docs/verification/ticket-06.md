@@ -35,6 +35,11 @@ The integration merge contains the validated feature pin unchanged, so this
 identical clean merge did not rerun the full local gate. No mutation-suite pass
 is claimed.
 
+After pushing integration commit `ce5e9e3`, both fresh Ubuntu workflow runs
+passed `pnpm verify:full`: [push run 38779849951](https://github.com/Ked57/difftrail/actions/runs/38779849951)
+and [pull-request run 38779843790](https://github.com/Ked57/difftrail/actions/runs/38779843790).
+The optional mutation job was skipped in both runs.
+
 ## Manual packed-CLI QA
 
 The first isolated npm consumer run against `33c7385` passed 26 of 28 cases.
