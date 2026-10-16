@@ -118,6 +118,7 @@ async function pnpmWorkspaceRepository() {
   return repo;
 }
 
+// Windows CI exceeds Vitest's 5s default for this multi-analysis fixture.
 test('resolves each pnpm workspace importer and rejects missing or mismatched installs', async () => {
   const repo = await pnpmWorkspaceRepository();
   const firstAlias = join(repo.root, 'apps/first/node_modules/external-leaf');
@@ -181,7 +182,7 @@ test('resolves each pnpm workspace importer and rejects missing or mismatched in
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('attributes dependency evidence gaps to a source that imports that dependency', async () => {
   const lock = [

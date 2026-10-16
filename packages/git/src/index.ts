@@ -23,6 +23,7 @@ export interface Snapshot {
   readonly directory: string;
   readonly repositoryRoot: string;
   readonly paths: readonly string[];
+  readonly symlinkTargets: ReadonlyMap<string, string>;
 }
 export interface Comparison {
   readonly root: string;
@@ -72,7 +73,13 @@ async function materialize(
 ): Promise<Snapshot> {
   await mkdir(directory);
   if (revision === null)
-    return { revision, directory, repositoryRoot: root, paths: [] };
+    return {
+      revision,
+      directory,
+      repositoryRoot: root,
+      paths: [],
+      symlinkTargets: new Map(),
+    };
   const entries = (
     await git(root, ['ls-tree', '-r', '-z', '--full-tree', revision])
   )
@@ -82,8 +89,14 @@ async function materialize(
   const tracked = trackedEntries(entries, revision);
   const paths: string[] = [];
   await materializeFiles(root, directory, tracked, paths);
-  await materializeLinks(root, revision, directory, tracked, paths);
-  return { revision, directory, repositoryRoot: root, paths };
+  const symlinkTargets = await materializeLinks(
+    root,
+    revision,
+    directory,
+    tracked,
+    paths,
+  );
+  return { revision, directory, repositoryRoot: root, paths, symlinkTargets };
 }
 
 function trackedEntries(
@@ -135,12 +148,14 @@ async function materializeLinks(
   directory: string,
   tracked: ReadonlyMap<string, TrackedEntry>,
   paths: string[],
-): Promise<void> {
+): Promise<ReadonlyMap<string, string>> {
+  const symlinkTargets = new Map<string, string>();
   for (const [path, entry] of tracked) {
     if (entry.mode !== '120000') continue;
     const target = (
       await git(root, ['cat-file', 'blob', entry.oid])
     ).toString();
+    const trackedTarget = containedTrackedTarget(path, target, tracked);
     const destination = resolve(directory, ...path.split('/'));
     if (supportedSourcePath(path)) {
       const resolvedTarget = await safeSourceTarget(
@@ -158,12 +173,32 @@ async function materializeLinks(
         relativeTarget.startsWith('.') ? relativeTarget : `./${relativeTarget}`,
         destination,
       );
+      if (trackedTarget) symlinkTargets.set(path, trackedTarget);
     } else {
       // Opaque links remain tracked terminal paths; their payload is never followed.
       await writeFile(destination, target);
+      if (trackedTarget) symlinkTargets.set(path, trackedTarget);
     }
     paths.push(path);
   }
+  return symlinkTargets;
+}
+
+function containedTrackedTarget(
+  alias: string,
+  target: string,
+  tracked: ReadonlyMap<string, TrackedEntry>,
+): string | undefined {
+  const targetPath = posix.normalize(posix.join(posix.dirname(alias), target));
+  if (
+    posix.isAbsolute(target) ||
+    /^[a-zA-Z]:/.test(target) ||
+    targetPath === '..' ||
+    targetPath.startsWith('../') ||
+    !tracked.has(targetPath)
+  )
+    return undefined;
+  return targetPath;
 }
 
 function supportedSourcePath(path: string): boolean {

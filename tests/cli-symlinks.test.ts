@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
-import { symlink } from 'node:fs/promises';
+import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'vitest';
 import { repository } from './helpers.js';
@@ -125,3 +125,79 @@ test('built CLI reports a Git submodule entry without fetching it', async () => 
     await repo.cleanup();
   }
 });
+
+test.each([
+  {
+    name: 'direct',
+    chained: false,
+    impacted: ['aliases/direct.ts', 'consumer.ts', 'real/actual.ts'],
+    consumerChain: ['real/actual.ts', 'aliases/direct.ts', 'consumer.ts'],
+  },
+  {
+    name: 'chained',
+    chained: true,
+    impacted: [
+      'aliases/chained.ts',
+      'aliases/direct.ts',
+      'consumer.ts',
+      'real/actual.ts',
+    ],
+    consumerChain: [
+      'real/actual.ts',
+      'aliases/direct.ts',
+      'aliases/chained.ts',
+      'consumer.ts',
+    ],
+  },
+])(
+  'built CLI propagates referent changes through $name symlink chains',
+  async ({ name, chained, impacted, consumerChain }) => {
+    const repo = await repository({
+      'real/actual.ts': 'export const value = 1;\n',
+      'consumer.ts': 'export const value = 1;\n',
+      'unrelated.ts': 'export const unrelated = 1;\n',
+    });
+    try {
+      await mkdir(join(repo.root, 'aliases'), { recursive: true });
+      await symlink('../real/actual.ts', join(repo.root, 'aliases/direct.ts'));
+      if (chained)
+        await symlink('direct.ts', join(repo.root, 'aliases/chained.ts'));
+      const imported = chained ? 'chained' : 'direct';
+      await writeFile(
+        join(repo.root, 'consumer.ts'),
+        `import {value} from './aliases/${imported}'; console.log(value);\n`,
+      );
+      repo.git('add', '--all');
+      repo.git('commit', '--quiet', '-m', `${name} symlink baseline`);
+      const base = repo.git('rev-parse', 'HEAD');
+      await writeFile(
+        join(repo.root, 'real/actual.ts'),
+        'export const value = 2;\n',
+      );
+      repo.git('add', '--all');
+      repo.git('commit', '--quiet', '-m', 'change symlink referent');
+      const head = repo.git('rev-parse', 'HEAD');
+      const result = cli(
+        repo.root,
+        '--base',
+        base,
+        '--head',
+        head,
+        '--json',
+        '--explain',
+      );
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+      const output = JSON.parse(result.stdout);
+      expect(output.files).toEqual(impacted);
+      expect(output.files).not.toContain('unrelated.ts');
+      expect(
+        output.explanations.find(
+          (item: { file: string }) => item.file === 'consumer.ts',
+        ).chain,
+      ).toEqual(consumerChain);
+    } finally {
+      await repo.cleanup();
+    }
+  },
+);
