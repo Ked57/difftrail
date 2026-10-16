@@ -11,4 +11,4 @@ pnpm --filter @difftrail/test-app dev
 
 Open the local Vite URL, then use Dashboard, Reports, and Settings in the top navigation. Build the production assets with `pnpm --filter @difftrail/test-app build`. The Vite component plugin writes `components.d.ts`; the committed file is the static mapping used by historical analysis.
 
-Run the real-Git CLI acceptance scenarios from the root with `pnpm test:example-history`. They create disposable full-workspace clones and exercise shared utility, page-only, asset, alias, and auto-import mapping commits, plus isolated deletion, rename, and invalid-source histories. The fixture calls the already-built CLI; it does not run setup commands from inside Difftrail.
+Run the real-Git CLI acceptance scenarios from the root with `pnpm test:example-history`. This builds the workspace, then creates disposable full-workspace clones and exercises shared utility, page-only, template asset, CSS URL asset, alias, and auto-import mapping commits, plus isolated deletion, rename, and invalid-source histories. The fixture calls the built CLI; it does not run setup commands from inside Difftrail.

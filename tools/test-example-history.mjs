@@ -181,6 +181,31 @@ try {
   );
 
   scenario(
+    'stylesheet-asset',
+    (cwd) =>
+      write(
+        cwd,
+        'apps/test-app/src/assets/card-texture.svg',
+        readFileSync(
+          join(cwd, 'apps/test-app/src/assets/card-texture.svg'),
+          'utf8',
+        ).replace('fill="#eff8f4"', 'fill="#d9e8f1"'),
+      ),
+    (cwd) =>
+      expectResult(
+        cwd,
+        [
+          'apps/test-app/src/App.vue',
+          'apps/test-app/src/assets/card-texture.svg',
+          'apps/test-app/src/components/GreetingCard.vue',
+          'apps/test-app/src/external/greeting-card.css',
+          'apps/test-app/src/main.ts',
+          'apps/test-app/src/pages/DashboardPage.vue',
+        ].sort(),
+      ),
+  );
+
+  scenario(
     'alias-map',
     (cwd) => {
       const tsconfigPath = join(cwd, 'apps/test-app/tsconfig.json');
@@ -303,7 +328,7 @@ try {
   );
 
   process.stdout.write(
-    'Example history acceptance passed (8 isolated Git histories).\n',
+    'Example history acceptance passed (9 isolated Git histories).\n',
   );
 } finally {
   rmSync(temporary, { recursive: true, force: true });

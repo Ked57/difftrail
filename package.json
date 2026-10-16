@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit && pnpm --filter @difftrail/test-app typecheck",
     "test:unit": "vitest run",
     "test:integration": "pnpm build && vitest run --config vitest.integration.config.ts && node tools/test-example-history.mjs",
+    "test:example-history": "pnpm build && node tools/test-example-history.mjs",
     "knip": "knip",
     "verify:fast": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit",
     "verify:full": "pnpm verify:fast && pnpm test:integration && pnpm test:package && pnpm knip",
