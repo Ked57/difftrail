@@ -42,7 +42,7 @@ async function inspectSource(
       const explicit = await inspectExplicitSource(snapshot, file);
       return {
         specifiers: new Set(),
-        loaderNames: new Set(),
+        loaderNames: explicit.loaderNames,
         relationships: explicit.moduleRelationships,
         localReferences: explicit.localReferences,
       };

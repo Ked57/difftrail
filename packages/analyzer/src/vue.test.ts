@@ -224,6 +224,99 @@ test('fails when a required local template asset is missing', async () => {
 }, 30_000);
 
 test.each([
+  [
+    'aliased named import',
+    'import { createRequire as makeRequire } from "node:module"; const load = makeRequire(import.meta.url); load("./provider.cjs");',
+  ],
+  [
+    'namespace member',
+    'import * as Module from "node:module"; const load = Module.createRequire(import.meta.url); load("./provider.cjs");',
+  ],
+  [
+    'default member',
+    'import Module from "node:module"; const load = Module["createRequire"](import.meta.url); load("./provider.cjs");',
+  ],
+  [
+    'CommonJS acquisition',
+    'const { createRequire: makeRequire } = require("module"); const load = makeRequire(import.meta.url); load("./provider.cjs");',
+  ],
+])(
+  'resolves Vue createRequire through %s',
+  async (_name, script) => {
+    const repo = await repository({
+      'provider.cjs': 'module.exports = true;',
+      'Widget.vue': `<script>${script}</script>`,
+    });
+    try {
+      await withComparison(repo.root, async (comparison) => {
+        const graph = await extractGraph(comparison.headSnapshot);
+        expect(
+          graph.edges
+            .filter((edge) => edge.importer === 'Widget.vue')
+            .map((edge) => [edge.specifier, edge.dependency, edge.kind]),
+        ).toContainEqual(['./provider.cjs', 'provider.cjs', 'require']);
+      });
+    } finally {
+      await repo.cleanup();
+    }
+  },
+  30_000,
+);
+
+test('ordinary Vue helpers named like Node loaders do not add dependencies', async () => {
+  const repo = await repository({
+    'provider.cjs': 'module.exports = true;',
+    'Widget.vue':
+      '<script setup>function createRequire(_base) { return (name) => name; } function load(_name) {} load("./provider.cjs");</script>',
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(
+        graph.edges.filter((edge) => edge.importer === 'Widget.vue'),
+      ).toEqual([]);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+}, 30_000);
+
+test('resolves a TypeScript script-setup namespace loader and rejects missing or nonliteral targets', async () => {
+  const repo = await repository({
+    'provider.cjs': 'module.exports = true;',
+    'Widget.vue':
+      '<script setup lang="ts">import * as Module from "node:module"; const load = Module.createRequire(import.meta.url); load("./provider.cjs");</script>',
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(
+        graph.edges
+          .filter((edge) => edge.importer === 'Widget.vue')
+          .map((edge) => [edge.specifier, edge.dependency, edge.kind]),
+      ).toContainEqual(['./provider.cjs', 'provider.cjs', 'require']);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+
+  for (const dependency of ['target', '"./missing.cjs"']) {
+    const invalid = await repository({
+      'Widget.vue': `<script setup lang="ts">import { createRequire } from "node:module"; const load = createRequire(import.meta.url); load(${dependency});</script>`,
+    });
+    try {
+      await withComparison(invalid.root, async (comparison) =>
+        expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
+          `Analysis gap in Widget.vue at ${comparison.head}`,
+        ),
+      );
+    } finally {
+      await invalid.cleanup();
+    }
+  }
+}, 30_000);
+
+test.each([
   ['invalid SFC script', '<script lang="ts">export const = 2;</script>'],
   ['dynamic template asset', '<template><img :src="imagePath" /></template>'],
 ])(
@@ -234,6 +327,61 @@ test.each([
       await withComparison(repo.root, async (comparison) =>
         expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
           `Analysis gap in Page.vue at ${comparison.head}`,
+        ),
+      );
+    } finally {
+      await repo.cleanup();
+    }
+  },
+  30_000,
+);
+
+test('resolves renamed Vue createRequire loaders from the owning component', async () => {
+  const repo = await repository({
+    'nested/provider.cjs': 'module.exports = true;',
+    'provider.cjs': 'module.exports = false;',
+    'nested/Widget.vue':
+      '<script setup>import { createRequire } from "node:module"; const load = createRequire(import.meta.url); load("./provider.cjs");</script>',
+    'Page.vue':
+      '<script setup>import Widget from "./nested/Widget.vue";</script>',
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(
+        graph.edges
+          .filter((edge) => edge.importer === 'nested/Widget.vue')
+          .map((edge) => [edge.specifier, edge.dependency, edge.kind])
+          .sort((left, right) => left.join('/').localeCompare(right.join('/'))),
+      ).toEqual([['./provider.cjs', 'nested/provider.cjs', 'require']]);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+}, 30_000);
+
+test.each([
+  [
+    'unrelated base',
+    'import { createRequire as makeRequire } from "node:module"; const load = makeRequire("/other/file.cjs"); load("./provider.cjs");',
+    'Node createRequire base must be the owning import.meta.url; other bases require unsupported resolution',
+  ],
+  [
+    'indirect factory result',
+    'import { createRequire } from "node:module"; const factory = createRequire; const load = factory(import.meta.url); load("./provider.cjs");',
+    'Node createRequire passed as a value is not supported; use a direct binding with import.meta.url',
+  ],
+])(
+  'reports a Vue analysis gap for %s',
+  async (_name, script, reason) => {
+    const repo = await repository({
+      'provider.cjs': 'module.exports = true;',
+      'Widget.vue': `<script setup>${script}</script>`,
+    });
+    try {
+      await withComparison(repo.root, async (comparison) =>
+        expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
+          `Analysis gap in Widget.vue at ${comparison.head}: ${reason}`,
         ),
       );
     } finally {

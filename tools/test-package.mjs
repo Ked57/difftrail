@@ -247,6 +247,61 @@ try {
   assert.equal(invalidVue.status, 1);
   assert.equal(invalidVue.stdout, '');
   assert.ok(invalidVue.stderr.includes('Page.vue'));
+  const createRequireFixture = join(temporary, 'vue-create-require-repository');
+  await mkdir(createRequireFixture);
+  run('git', ['init', '--quiet'], createRequireFixture);
+  run(
+    'git',
+    ['config', 'user.email', 'fixture@example.invalid'],
+    createRequireFixture,
+  );
+  run('git', ['config', 'user.name', 'Fixture'], createRequireFixture);
+  await mkdir(join(createRequireFixture, 'nested'));
+  for (const [path, contents] of Object.entries({
+    'nested/provider.cjs': 'module.exports = 1;',
+    'provider.cjs': 'module.exports = 0;',
+    'nested/Widget.vue':
+      '<script setup>import { createRequire as makeRequire } from "node:module"; const load = makeRequire(import.meta.url); load("./provider.cjs");</script>',
+    'Page.vue':
+      '<script setup>import Widget from "./nested/Widget.vue";</script>',
+  }))
+    await writeFile(join(createRequireFixture, path), contents);
+  run('git', ['add', '--all'], createRequireFixture);
+  run(
+    'git',
+    ['commit', '--quiet', '-m', 'Vue createRequire baseline'],
+    createRequireFixture,
+  );
+  await writeFile(
+    join(createRequireFixture, 'nested/provider.cjs'),
+    'module.exports = 2;',
+  );
+  run(
+    'git',
+    ['commit', '--quiet', '-am', 'change nested provider'],
+    createRequireFixture,
+  );
+  assert.equal(
+    run(bin, [], createRequireFixture),
+    'Page.vue\nnested/Widget.vue\nnested/provider.cjs\n',
+  );
+  await writeFile(
+    join(createRequireFixture, 'nested/Widget.vue'),
+    '<script setup>import { createRequire } from "node:module"; const load = createRequire("/other/file.cjs"); load("./provider.cjs");</script>',
+  );
+  run(
+    'git',
+    ['commit', '--quiet', '-am', 'unsupported Vue createRequire base'],
+    createRequireFixture,
+  );
+  const unsupportedVueFactory = spawnSync(
+    process.execPath,
+    [join(packageRoot, 'dist', 'cli.js'), '--filter', 'never-matches'],
+    { cwd: createRequireFixture, encoding: 'utf8' },
+  );
+  assert.equal(unsupportedVueFactory.status, 1);
+  assert.equal(unsupportedVueFactory.stdout, '');
+  assert.ok(unsupportedVueFactory.stderr.includes('nested/Widget.vue'));
   const autoImportFixture = join(temporary, 'auto-import-repository');
   await mkdir(autoImportFixture);
   run('git', ['init', '--quiet'], autoImportFixture);
