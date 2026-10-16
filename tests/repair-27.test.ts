@@ -106,28 +106,32 @@ async function configHistory(
   };
 }
 
-test('built CLI rejects unsupported auto-import options atomically at either endpoint', async () => {
-  const histories: Awaited<ReturnType<typeof configHistory>>[] = [];
-  for (const invalidConfig of [identifierConfig, callResultConfig]) {
-    histories.push(await configHistory(invalidConfig, literalConfig));
-    histories.push(await configHistory(literalConfig, invalidConfig));
-  }
-  try {
-    for (const repo of histories) {
-      for (const args of [
-        ['--base', repo.base, '--head', repo.head],
-        ['--base', repo.base, '--head', repo.head, '--json'],
-        ['--base', repo.base, '--head', repo.head, '--null'],
-        [
+// Four histories in one test exceed the 30s Windows integration budget.
+// Each case still rejects one endpoint with status 1 and empty stdout.
+test.each([
+  ['identifier options', 'base', identifierConfig, literalConfig],
+  ['identifier options', 'head', literalConfig, identifierConfig],
+  ['call-result options', 'base', callResultConfig, literalConfig],
+  ['call-result options', 'head', literalConfig, callResultConfig],
+])(
+  'built CLI rejects %s atomically when only the %s endpoint is unsupported',
+  async (_kind, _endpoint, baseConfig, headConfig) => {
+    const repo = await configHistory(baseConfig, headConfig);
+    try {
+      for (const mode of [
+        [],
+        ['--json'],
+        ['--null'],
+        ['--filter', 'independent.ts'],
+      ]) {
+        const result = cli(
+          repo.root,
           '--base',
           repo.base,
           '--head',
           repo.head,
-          '--filter',
-          'independent.ts',
-        ],
-      ]) {
-        const result = cli(repo.root, ...args);
+          ...mode,
+        );
         expect(result.status).toBe(1);
         expect(result.stdout).toBe('');
         expect(result.stderr).toContain('Analysis gap in vite.config.ts');
@@ -135,11 +139,11 @@ test('built CLI rejects unsupported auto-import options atomically at either end
         expect(result.stderr).toContain('unsupported static expression');
         expect(existsSync(join(repo.root, 'executed'))).toBe(false);
       }
+    } finally {
+      await repo.cleanup();
     }
-  } finally {
-    await Promise.all(histories.map((repo) => repo.cleanup()));
-  }
-});
+  },
+);
 
 test('built CLI returns exactly the mapped provider and its consumer for literal options', async () => {
   const repo = await configHistory(literalConfig, literalConfig, false);
