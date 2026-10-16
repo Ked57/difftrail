@@ -23,15 +23,18 @@ and the linked PR checks.
   reading their targets; analyzable aliases resolve only through contained,
   tracked relative chains in the isolated endpoint snapshot. Submodule entries
   produce a separate no-fetch diagnostic.
-- Final PR #21 repair candidate `51858005eb7cf0666578030febaa9f7a91c2345e`
-  includes the Bugbot fixes for template-visible local Vue components and mapped
-  components in committed external HTML templates. It also narrows Options API
-  registration recognition to direct option objects or a `defineComponent`
-  value imported from `vue`, following the Spec P2 on the prior candidate
-  `6bce24e5a06b69d7bc06121da28ae6e4b670caa7`. The updated focused analyzer
-  regressions and `pnpm verify:fast` passed with 67 unit tests. Standards review
-  accepted `6bce24e`; review of `5185800`, installed-package QA, and CI results
-  are pending.
+- Integrated runtime revision `435ce747a0ea55c40bfbf327490c136ca0590b7f`
+  includes the local Vue component, external-template, and bounded static
+  Options API registration repairs. Final PR #21 repair candidate
+  `dbd3f53b454c25443c1a3bc33ac4dd3cebf84105` additionally parses SFC scripts
+  using their declared JS/JSX/TS/TSX language and recognizes static component
+  options wrapped in parentheses, `as`, or `satisfies` expressions. Recognition
+  remains limited to direct option objects or `defineComponent` imported from
+  `vue`; arbitrary wrappers remain unresolved. Focused auto-import regressions
+  and `pnpm verify:fast` passed with 69 unit tests. Current review, installed
+  CLI QA, and platform acceptance results are maintained in the [Ticket 20
+  release-validation comment](https://github.com/Ked57/difftrail/issues/20#issuecomment-6215990357)
+  and linked PR checks.
 
 ## Evidence
 
@@ -73,9 +76,8 @@ and the linked PR checks.
   release-validation comment and linked PR checks.
 
 The integrated changes and measured evidence are recorded in
-[`Ticket 08 verification`](../verification/ticket-08.md). The statement that no
-runtime code changed after the reviewed release pin applies to integration head
-`fd29b23ddadc629e1afb2683366321ba2206ba7a`; candidate `5185800` changes runtime
-behavior for the final PR #21 findings and their Spec repair. Final acceptance
-remains maintained in the Ticket 20 release-validation comment and linked PR
-checks while candidate review, QA, and CI complete. No npm package was published.
+[`Ticket 08 verification`](../verification/ticket-08.md). The release-pin
+measurements and platform results above are historical for their stated
+revisions. Runtime revisions `5185800` and `dbd3f53` add subsequent PR #21
+repairs; current acceptance results are maintained in the Ticket 20
+release-validation comment and linked PR checks. No npm package was published.
