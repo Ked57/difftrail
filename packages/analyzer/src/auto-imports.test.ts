@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { expect, test } from 'vitest';
 import { withComparison } from '@difftrail/git';
 import { repository } from '../../../tests/helpers.js';
@@ -28,11 +28,12 @@ function expectWorkspaceMapping(
 }
 
 test('resolves committed Vue component and auto-import declarations to actual consumers', async () => {
+  const componentDeclarations = ['nested', '..', 'components.d.ts'].join(sep);
   const repo = await repository({
     'vite.config.ts': [
       "import Components from 'unplugin-vue-components';",
       "import AutoImport from 'unplugin-auto-import';",
-      "export default [Components({ dts: 'components.d.ts' }), AutoImport({ dts: 'auto-imports.d.ts' })];",
+      `export default [Components({ dts: ${JSON.stringify(componentDeclarations)} }), AutoImport({ dts: 'auto-imports.d.ts' })];`,
     ].join('\n'),
     'components.d.ts': [
       "declare module 'vue' {",
@@ -75,7 +76,7 @@ test('resolves committed Vue component and auto-import declarations to actual co
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('fails when a committed auto-import declaration points outside its snapshot', async () => {
   const repo = await repository({
@@ -101,7 +102,7 @@ test('fails when a committed auto-import declaration points outside its snapshot
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('links a static unplugin-auto-import config directly to its script consumer', async () => {
   const repo = await repository({
@@ -132,7 +133,7 @@ test('links a static unplugin-auto-import config directly to its script consumer
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('resolves a static external API mapping through committed package evidence', async () => {
   const declaration = {
@@ -207,7 +208,7 @@ test('resolves a static external API mapping through committed package evidence'
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('resolves direct workspace API mappings through committed package exports', async () => {
   const repo = await repository({
@@ -283,7 +284,7 @@ test('resolves direct workspace API mappings through committed package exports',
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('selects workspace JS export conditions from each nearest package type', async () => {
   const repo = await repository({
@@ -367,7 +368,7 @@ test('selects workspace JS export conditions from each nearest package type', as
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('resolves static auto-import targets through inherited TypeScript aliases', async () => {
   const repo = await repository({
@@ -411,4 +412,4 @@ test('resolves static auto-import targets through inherited TypeScript aliases',
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);

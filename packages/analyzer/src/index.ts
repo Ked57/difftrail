@@ -184,7 +184,7 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
     const autoImports = await autoImportEdges(snapshot);
     return {
       revision: snapshot.revision,
-      edges: [...localEdges, ...autoImports],
+      edges: [...localEdges, ...autoImports, ...symlinkEdges(snapshot)],
     };
   }
   const resolution = await prepareResolution(
@@ -216,7 +216,17 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
     ...configProviderEdges(resolution.external, resolution.configExtends),
   );
   edges.push(...autoImports);
+  edges.push(...symlinkEdges(snapshot));
   return { revision: snapshot.revision, edges };
+}
+
+function symlinkEdges(snapshot: Snapshot): DependencyEdge[] {
+  return [...snapshot.symlinkTargets].map(([importer, dependency]) => ({
+    importer,
+    dependency,
+    specifier: dependency,
+    kind: 'symlink',
+  }));
 }
 
 interface ResolutionEvidence {

@@ -225,7 +225,7 @@ async function scriptEdges(
   const virtualScripts = await vueScripts(snapshot);
   const virtualByPath = new Map(
     virtualScripts.map((item) => [
-      resolve(snapshot.directory, item.path),
+      compilerFileName(resolve(snapshot.directory, item.path)),
       item.source,
     ]),
   );
@@ -239,10 +239,11 @@ async function scriptEdges(
   const host = ts.createCompilerHost(options);
   const fileExists = host.fileExists.bind(host);
   host.fileExists = (filename) =>
-    virtualByPath.has(resolve(filename)) || fileExists(filename);
+    virtualByPath.has(compilerFileName(resolve(filename))) ||
+    fileExists(filename);
   const getSourceFile = host.getSourceFile.bind(host);
   host.getSourceFile = (filename, languageVersion, onError, fresh) =>
-    virtualByPath.get(resolve(filename)) ??
+    virtualByPath.get(compilerFileName(resolve(filename))) ??
     getSourceFile(filename, languageVersion, onError, fresh);
   const program = ts.createProgram(
     [
@@ -257,7 +258,7 @@ async function scriptEdges(
   const checker = program.getTypeChecker();
   const byDeclaration = new Map(
     collection.mappings.map((mapping) => [
-      `${resolve(snapshot.directory, mapping.metadata)}\0${mapping.name}`,
+      `${compilerFileName(resolve(snapshot.directory, mapping.metadata))}\0${mapping.name}`,
       mapping,
     ]),
   );
@@ -379,7 +380,9 @@ function autoImportReferenceEdges(
   const declaration = symbol?.declarations?.find(ts.isVariableDeclaration);
   if (declaration) {
     const metadata = declaration.getSourceFile().fileName;
-    const mapping = byDeclaration.get(`${metadata}\0${node.text}`);
+    const mapping = byDeclaration.get(
+      `${compilerFileName(metadata)}\0${node.text}`,
+    );
     return mapping
       ? mappedEdges(snapshot, importer, mapping.name, collection, [mapping])
       : [];
@@ -392,6 +395,11 @@ function autoImportReferenceEdges(
   return configured.length
     ? mappedEdges(snapshot, importer, node.text, collection, configured)
     : [];
+}
+
+function compilerFileName(path: string): string {
+  if (ts.sys.useCaseSensitiveFileNames) return path;
+  return path.replace(/\\/g, '/').toLowerCase();
 }
 
 function isReference(node: ts.Identifier): boolean {

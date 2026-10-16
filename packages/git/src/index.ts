@@ -1,13 +1,29 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  rm,
+  realpath,
+  symlink,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve, relative, isAbsolute, sep } from 'node:path';
+import {
+  dirname,
+  join,
+  resolve,
+  relative,
+  isAbsolute,
+  sep,
+  posix,
+} from 'node:path';
 
 export interface Snapshot {
   readonly revision: string | null;
   readonly directory: string;
   readonly repositoryRoot: string;
   readonly paths: readonly string[];
+  readonly symlinkTargets: ReadonlyMap<string, string>;
 }
 export interface Comparison {
   readonly root: string;
@@ -21,6 +37,10 @@ export interface ComparisonOptions {
   readonly base?: string;
   readonly head?: string;
   readonly mergeBase?: boolean;
+}
+interface TrackedEntry {
+  readonly mode: string;
+  readonly oid: string;
 }
 async function git(cwd: string, args: readonly string[]): Promise<Buffer> {
   return new Promise((accept, reject) => {
@@ -53,31 +73,180 @@ async function materialize(
 ): Promise<Snapshot> {
   await mkdir(directory);
   if (revision === null)
-    return { revision, directory, repositoryRoot: root, paths: [] };
+    return {
+      revision,
+      directory,
+      repositoryRoot: root,
+      paths: [],
+      symlinkTargets: new Map(),
+    };
   const entries = (
     await git(root, ['ls-tree', '-r', '-z', '--full-tree', revision])
   )
     .toString()
     .split('\0')
     .filter(Boolean);
+  const tracked = trackedEntries(entries, revision);
   const paths: string[] = [];
+  await materializeFiles(root, directory, tracked, paths);
+  const symlinkTargets = await materializeLinks(
+    root,
+    revision,
+    directory,
+    tracked,
+    paths,
+  );
+  return { revision, directory, repositoryRoot: root, paths, symlinkTargets };
+}
+
+function trackedEntries(
+  entries: readonly string[],
+  revision: string,
+): Map<string, TrackedEntry> {
+  const tracked = new Map<string, TrackedEntry>();
   for (const entry of entries) {
     const tab = entry.indexOf('\t');
     const [mode, kind, oid] = entry.slice(0, tab).split(' ');
     const path = entry.slice(tab + 1);
-    if (!oid || kind !== 'blob' || mode === '120000')
+    if (kind === 'commit' && mode === '160000')
+      throw new Error(
+        `Snapshot ${revision}: unsupported Git submodule entry ${path}`,
+      );
+    if (!mode || !oid || kind !== 'blob')
       throw new Error(
         `Snapshot ${revision}: unsupported tracked entry ${path}`,
       );
-    const destination = resolve(directory, path);
+    tracked.set(path, { mode, oid });
+  }
+  return tracked;
+}
+
+async function materializeFiles(
+  root: string,
+  directory: string,
+  tracked: ReadonlyMap<string, TrackedEntry>,
+  paths: string[],
+): Promise<void> {
+  for (const [path, entry] of tracked) {
+    const destination = resolve(directory, ...path.split('/'));
     const local = relative(directory, destination);
     if (local === '..' || local.startsWith(`..${sep}`) || isAbsolute(local))
       throw new Error(`Unsafe snapshot path: ${path}`);
     await mkdir(dirname(destination), { recursive: true });
-    await writeFile(destination, await git(root, ['cat-file', 'blob', oid]));
+    if (entry.mode === '120000') continue;
+    await writeFile(
+      destination,
+      await git(root, ['cat-file', 'blob', entry.oid]),
+    );
     paths.push(path);
   }
-  return { revision, directory, repositoryRoot: root, paths };
+}
+
+async function materializeLinks(
+  root: string,
+  revision: string,
+  directory: string,
+  tracked: ReadonlyMap<string, TrackedEntry>,
+  paths: string[],
+): Promise<ReadonlyMap<string, string>> {
+  const symlinkTargets = new Map<string, string>();
+  for (const [path, entry] of tracked) {
+    if (entry.mode !== '120000') continue;
+    const target = (
+      await git(root, ['cat-file', 'blob', entry.oid])
+    ).toString();
+    const trackedTarget = containedTrackedTarget(path, target, tracked);
+    const destination = resolve(directory, ...path.split('/'));
+    if (supportedSourcePath(path)) {
+      const resolvedTarget = await safeSourceTarget(
+        root,
+        path,
+        target,
+        tracked,
+        revision,
+      );
+      const relativeTarget = posix.relative(
+        posix.dirname(path),
+        resolvedTarget,
+      );
+      await symlink(
+        relativeTarget.startsWith('.') ? relativeTarget : `./${relativeTarget}`,
+        destination,
+      );
+      if (trackedTarget) symlinkTargets.set(path, trackedTarget);
+    } else {
+      // Opaque links remain tracked terminal paths; their payload is never followed.
+      await writeFile(destination, target);
+      if (trackedTarget) symlinkTargets.set(path, trackedTarget);
+    }
+    paths.push(path);
+  }
+  return symlinkTargets;
+}
+
+function containedTrackedTarget(
+  alias: string,
+  target: string,
+  tracked: ReadonlyMap<string, TrackedEntry>,
+): string | undefined {
+  const targetPath = posix.normalize(posix.join(posix.dirname(alias), target));
+  if (
+    posix.isAbsolute(target) ||
+    /^[a-zA-Z]:/.test(target) ||
+    targetPath === '..' ||
+    targetPath.startsWith('../') ||
+    !tracked.has(targetPath)
+  )
+    return undefined;
+  return targetPath;
+}
+
+function supportedSourcePath(path: string): boolean {
+  return /\.(?:[cm]?[jt]s|jsx|tsx|vue|css|scss|sass|less|json)$/.test(path);
+}
+
+async function safeSourceTarget(
+  root: string,
+  alias: string,
+  target: string,
+  tracked: ReadonlyMap<string, TrackedEntry>,
+  revision: string,
+): Promise<string> {
+  const resolveLink = async (
+    linkPath: string,
+    linkTarget: string,
+    seen: Set<string>,
+  ): Promise<string> => {
+    const targetPath = posix.normalize(
+      posix.join(posix.dirname(linkPath), linkTarget),
+    );
+    if (
+      posix.isAbsolute(linkTarget) ||
+      /^[a-zA-Z]:/.test(linkTarget) ||
+      targetPath === '..' ||
+      targetPath.startsWith('../')
+    )
+      throw new Error(
+        `Snapshot ${revision}: linked source ${alias} has an unsafe target ${JSON.stringify(linkTarget)}`,
+      );
+    const entry = tracked.get(targetPath);
+    if (!entry)
+      throw new Error(
+        `Snapshot ${revision}: linked source ${alias} has no tracked target ${targetPath}`,
+      );
+    if (entry.mode !== '120000') return targetPath;
+    if (seen.has(targetPath))
+      throw new Error(
+        `Snapshot ${revision}: linked source ${alias} contains a symlink cycle at ${targetPath}`,
+      );
+    seen.add(targetPath);
+    return resolveLink(
+      targetPath,
+      (await git(root, ['cat-file', 'blob', entry.oid])).toString(),
+      seen,
+    );
+  };
+  return resolveLink(alias, target, new Set([alias]));
 }
 async function resolveCommit(
   root: string,
@@ -153,9 +322,10 @@ export async function withComparison<T>(
   run: (comparison: Comparison) => Promise<T>,
   options: ComparisonOptions = {},
 ): Promise<T> {
-  const root = (await git(cwd, ['rev-parse', '--show-toplevel']))
+  const gitRoot = (await git(cwd, ['rev-parse', '--show-toplevel']))
     .toString()
     .trimEnd();
+  const root = await realpath(gitRoot);
   const { base, head } = await selectEndpoints(root, options);
   const temporaryPath = await mkdtemp(join(tmpdir(), 'difftrail-snapshots-'));
   try {

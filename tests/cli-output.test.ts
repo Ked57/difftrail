@@ -26,7 +26,7 @@ test('built CLI emits exact NUL output and rejects incompatible options atomical
     'space name.md': 'base',
     'é.md': 'base',
     '.hidden.md': 'base',
-    'back\\slash.md': 'base',
+    ...(process.platform === 'win32' ? {} : { 'back\\slash.md': 'base' }),
     'src/é.md': 'base',
   });
   try {
@@ -34,11 +34,13 @@ test('built CLI emits exact NUL output and rejects incompatible options atomical
       'space name.md': 'head',
       'é.md': 'head',
       '.hidden.md': 'head',
-      'back\\slash.md': 'head',
+      ...(process.platform === 'win32' ? {} : { 'back\\slash.md': 'head' }),
       'src/é.md': 'head',
     });
     const expected =
-      '.hidden.md\0back\\slash.md\0space name.md\0src/é.md\0é.md\0';
+      process.platform === 'win32'
+        ? '.hidden.md\0space name.md\0src/é.md\0é.md\0'
+        : '.hidden.md\0back\\slash.md\0space name.md\0src/é.md\0é.md\0';
     expect(cli(repo.root, '--null')).toMatchObject({
       status: 0,
       stdout: expected,
@@ -56,7 +58,9 @@ test('built CLI emits exact NUL output and rejects incompatible options atomical
     );
     expect(cli(repo.root, '--filter', '?.md').stdout).toBe('é.md\n');
     expect(cli(repo.root, '--filter', '*.md').stdout).toBe(
-      '.hidden.md\nback\\slash.md\nspace name.md\né.md\n',
+      process.platform === 'win32'
+        ? '.hidden.md\nspace name.md\né.md\n'
+        : '.hidden.md\nback\\slash.md\nspace name.md\né.md\n',
     );
     for (const args of [
       ['--json', '--null'],
@@ -156,60 +160,71 @@ test('built CLI filters removed paths and explains them from the base snapshot',
   }
 });
 
-test('built CLI handles selected paths containing line breaks without partial output', async () => {
-  const repo = await repository({ 'base.md': 'base' });
-  try {
-    await repo.commit({
-      'line\nbreak.md': 'changed',
-      'carriage\rreturn.md': 'changed',
-    });
-    const lineResult = cli(repo.root);
-    expect(lineResult.status).toBe(2);
-    expect(lineResult.stdout).toBe('');
-    expect(lineResult.stderr).toContain('--json');
-    expect(lineResult.stderr).toContain('--null');
-    expect(JSON.parse(cli(repo.root, '--json').stdout).files).toContain(
-      'line\nbreak.md',
-    );
-    expect(cli(repo.root, '--null').stdout).toContain('line\nbreak.md\0');
-    expect(JSON.parse(cli(repo.root, '--json').stdout).files).toContain(
-      'carriage\rreturn.md',
-    );
-    expect(cli(repo.root, '--null').stdout).toContain('carriage\rreturn.md\0');
-    expect(cli(repo.root, '--filter', 'base.md').stdout).toBe('');
-    expect(
-      JSON.parse(cli(repo.root, '--json', '--filter', '**/line*').stdout).files,
-    ).toEqual(['line\nbreak.md']);
-  } finally {
-    await repo.cleanup();
-  }
-});
+// Windows filesystems reject CR and LF in path components, so these exact
+// path-serialization cases are runnable only on hosts that can create them.
+test.skipIf(process.platform === 'win32')(
+  'built CLI handles selected paths containing line breaks without partial output',
+  async () => {
+    const repo = await repository({ 'base.md': 'base' });
+    try {
+      await repo.commit({
+        'line\nbreak.md': 'changed',
+        'carriage\rreturn.md': 'changed',
+      });
+      const lineResult = cli(repo.root);
+      expect(lineResult.status).toBe(2);
+      expect(lineResult.stdout).toBe('');
+      expect(lineResult.stderr).toContain('--json');
+      expect(lineResult.stderr).toContain('--null');
+      expect(JSON.parse(cli(repo.root, '--json').stdout).files).toContain(
+        'line\nbreak.md',
+      );
+      expect(cli(repo.root, '--null').stdout).toContain('line\nbreak.md\0');
+      expect(JSON.parse(cli(repo.root, '--json').stdout).files).toContain(
+        'carriage\rreturn.md',
+      );
+      expect(cli(repo.root, '--null').stdout).toContain(
+        'carriage\rreturn.md\0',
+      );
+      expect(cli(repo.root, '--filter', 'base.md').stdout).toBe('');
+      expect(
+        JSON.parse(cli(repo.root, '--json', '--filter', '**/line*').stdout)
+          .files,
+      ).toEqual(['line\nbreak.md']);
+    } finally {
+      await repo.cleanup();
+    }
+  },
+);
 
-test('recursive filters preserve paths through newline directory components', async () => {
-  const repo = await repository({ 'before.md': 'base' });
-  try {
-    const base = repo.git('rev-parse', 'HEAD');
-    const head = await repo.commit({ 'dir\nname/page.md': 'changed' });
-    const expectedJson =
-      JSON.stringify({
-        root: await realpath(repo.root),
-        base,
-        head,
-        scope: 'static',
-        files: ['dir\nname/page.md'],
-        removed: [],
-      }) + '\n';
-    expect(cli(repo.root, '--json', '--filter', '**/page.md')).toMatchObject({
-      status: 0,
-      stdout: expectedJson,
-      stderr: '',
-    });
-    expect(cli(repo.root, '--null', '--filter', '**/page.md')).toMatchObject({
-      status: 0,
-      stdout: 'dir\nname/page.md\0',
-      stderr: '',
-    });
-  } finally {
-    await repo.cleanup();
-  }
-});
+test.skipIf(process.platform === 'win32')(
+  'recursive filters preserve paths through newline directory components',
+  async () => {
+    const repo = await repository({ 'before.md': 'base' });
+    try {
+      const base = repo.git('rev-parse', 'HEAD');
+      const head = await repo.commit({ 'dir\nname/page.md': 'changed' });
+      const expectedJson =
+        JSON.stringify({
+          root: await realpath(repo.root),
+          base,
+          head,
+          scope: 'static',
+          files: ['dir\nname/page.md'],
+          removed: [],
+        }) + '\n';
+      expect(cli(repo.root, '--json', '--filter', '**/page.md')).toMatchObject({
+        status: 0,
+        stdout: expectedJson,
+        stderr: '',
+      });
+      expect(cli(repo.root, '--null', '--filter', '**/page.md')).toMatchObject({
+        status: 0,
+        stdout: 'dir\nname/page.md\0',
+        stderr: '',
+      });
+    } finally {
+      await repo.cleanup();
+    }
+  },
+);

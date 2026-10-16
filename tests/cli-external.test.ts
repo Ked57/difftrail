@@ -117,7 +117,11 @@ async function pnpmWorkspaceFixture() {
 }
 
 function pnpmCommand(root: string, args: readonly string[]) {
-  return spawnSync('pnpm', [...args], { cwd: root, encoding: 'utf8' });
+  return spawnSync('pnpm', [...args], {
+    cwd: root,
+    encoding: 'utf8',
+    ...(process.platform === 'win32' ? { shell: true } : {}),
+  });
 }
 
 async function installPnpmWorkspace(

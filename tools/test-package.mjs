@@ -67,13 +67,36 @@ try {
   const manifest = JSON.parse(
     await readFile(join(packageRoot, 'package.json'), 'utf8'),
   );
+  const workspaceManifest = JSON.parse(
+    await readFile(join(process.cwd(), 'package.json'), 'utf8'),
+  );
   assert.equal(manifest.name, 'difftrail');
   assert.equal(manifest.license, 'Apache-2.0');
   assert.equal(manifest.bin.difftrail, 'dist/cli.js');
+  assert.equal(manifest.engines.node, '^22.18.0 || ^24.11.0');
+  assert.equal(workspaceManifest.engines.node, manifest.engines.node);
+  assert.deepEqual(manifest.files, ['dist', 'README.md', 'LICENSE']);
   assert.equal(manifest.dependencies['dependency-cruiser'], '18.6.0');
   assert.equal(manifest.dependencies['@vue/compiler-sfc'], '3.5.44');
   assert.equal(manifest.dependencies.typescript, '6.0.3');
   assert.ok(!JSON.stringify(manifest.dependencies).includes('workspace:'));
+  /** @type {{ files: { path: string }[] }[]} */
+  const packMetadata = JSON.parse(
+    run(
+      'npm',
+      ['pack', '--dry-run', '--json', '--ignore-scripts'],
+      join(process.cwd(), 'packages', 'cli'),
+    ),
+  );
+  const packedArtifact = packMetadata[0];
+  assert.ok(packedArtifact);
+  const packedFiles = packedArtifact.files.map((file) => file.path);
+  assert.deepEqual(packedFiles.sort(), [
+    'LICENSE',
+    'README.md',
+    'dist/cli.js',
+    'package.json',
+  ]);
   const code = await readFile(join(packageRoot, 'dist/cli.js'), 'utf8');
   assert.ok(code.startsWith('#!/usr/bin/env node\n'));
   assert.ok(!code.includes('@difftrail/'));

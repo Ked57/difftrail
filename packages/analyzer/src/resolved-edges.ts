@@ -1,5 +1,5 @@
-import { isAbsolute, relative, resolve } from 'node:path';
-import { realpath } from 'node:fs/promises';
+import { isAbsolute, posix, relative, resolve, sep } from 'node:path';
+import { lstat, realpath } from 'node:fs/promises';
 import { type IModule } from 'dependency-cruiser';
 import type { DependencyEdge } from '@difftrail/core';
 import type { Snapshot } from '@difftrail/git';
@@ -58,12 +58,11 @@ export async function resolvedEdges(
 }
 
 function repositoryPath(snapshot: Snapshot, path: string): string {
-  return relative(
+  const local = relative(
     snapshot.directory,
     isAbsolute(path) ? path : resolve(snapshot.directory, path),
-  )
-    .split('\\')
-    .join('/');
+  );
+  return sep === '\\' ? local.split(sep).join('/') : local;
 }
 
 function resolvedRelationships(
@@ -102,7 +101,9 @@ async function dependencyEdges(
     importer,
     dependency.module,
   );
-  const target = repositoryPath(snapshot, dependency.resolved);
+  const target =
+    (await trackedSymlinkAlias(snapshot, importer, dependency)) ??
+    repositoryPath(snapshot, dependency.resolved);
   if (!tracked.has(target) && external)
     return externalMetadataEdges(
       snapshot,
@@ -126,6 +127,38 @@ async function dependencyEdges(
     inspections,
     resolution.workspaces,
   );
+}
+
+async function trackedSymlinkAlias(
+  snapshot: Snapshot,
+  importer: string,
+  dependency: IModule['dependencies'][number],
+): Promise<string | undefined> {
+  if (!dependency.module.startsWith('.')) return undefined;
+  const candidate = posix.normalize(
+    posix.join(posix.dirname(importer), dependency.module),
+  );
+  const candidates = [
+    candidate,
+    ...['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.vue'].map(
+      (extension) => `${candidate}${extension}`,
+    ),
+    ...['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.vue'].map((extension) =>
+      posix.join(candidate, `index${extension}`),
+    ),
+  ];
+  const resolved = resolve(snapshot.directory, dependency.resolved);
+  for (const path of candidates) {
+    if (!snapshot.paths.includes(path)) continue;
+    const local = resolve(snapshot.directory, ...path.split('/'));
+    try {
+      if (!(await lstat(local)).isSymbolicLink()) continue;
+      if ((await realpath(local)) === (await realpath(resolved))) return path;
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
 }
 
 async function externalMetadataEdges(

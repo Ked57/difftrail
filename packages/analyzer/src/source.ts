@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import ts from 'typescript';
 import type { Snapshot } from '@difftrail/git';
@@ -60,14 +61,34 @@ async function inspectSource(
       relationships: [],
       localReferences: [],
     };
-  const filename = resolve(snapshot.directory, file);
-  const program = ts.createProgram([filename], {
+  const sourcePath = resolve(snapshot.directory, file);
+  const sourceText = await readFile(sourcePath, 'utf8');
+  const extension = file.slice(file.lastIndexOf('.'));
+  const parserFilename = resolve(
+    snapshot.directory,
+    `__difftrail-source${extension}`,
+  );
+  const parserPath = compilerPath(parserFilename);
+  const options: ts.CompilerOptions = {
     allowJs: true,
     noResolve: true,
     noEmit: true,
     noLib: true,
-  });
-  const source = program.getSourceFile(filename);
+  };
+  const host = ts.createCompilerHost(options);
+  const fileExists = host.fileExists.bind(host);
+  host.fileExists = (path) =>
+    compilerPath(path) === parserPath || fileExists(path);
+  const read = host.readFile.bind(host);
+  host.readFile = (path) =>
+    compilerPath(path) === parserPath ? sourceText : read(path);
+  const getSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (path, languageVersion, onError, fresh) =>
+    compilerPath(path) === parserPath
+      ? ts.createSourceFile(path, sourceText, languageVersion, true)
+      : getSourceFile(path, languageVersion, onError, fresh);
+  const program = ts.createProgram([parserFilename], options, host);
+  const source = program.getSourceFile(parserFilename);
   if (!source) throw gap(snapshot, file, 'source parser did not return a file');
   const diagnostics = program.getSyntacticDiagnostics(source);
   if (diagnostics.length)
@@ -105,6 +126,11 @@ async function inspectSource(
     relationships,
     localReferences: [],
   };
+}
+
+function compilerPath(path: string): string {
+  const resolved = resolve(path);
+  return ts.sys.useCaseSensitiveFileNames ? resolved : resolved.toLowerCase();
 }
 
 function recordRelationship(
