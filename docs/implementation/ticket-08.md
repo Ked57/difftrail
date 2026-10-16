@@ -23,6 +23,15 @@ and the linked PR checks.
   reading their targets; analyzable aliases resolve only through contained,
   tracked relative chains in the isolated endpoint snapshot. Submodule entries
   produce a separate no-fetch diagnostic.
+- Final PR #21 repair candidate `51858005eb7cf0666578030febaa9f7a91c2345e`
+  includes the Bugbot fixes for template-visible local Vue components and mapped
+  components in committed external HTML templates. It also narrows Options API
+  registration recognition to direct option objects or a `defineComponent`
+  value imported from `vue`, following the Spec P2 on the prior candidate
+  `6bce24e5a06b69d7bc06121da28ae6e4b670caa7`. The updated focused analyzer
+  regressions and `pnpm verify:fast` passed with 67 unit tests. Standards review
+  accepted `6bce24e`; review of `5185800`, installed-package QA, and CI results
+  are pending.
 
 ## Evidence
 
@@ -53,17 +62,20 @@ and the linked PR checks.
   reached and passed the runtime, unit, integration, and example-history jobs,
   then exposed a spaced-Git-argument issue in the package-test helper. The
   independently reviewed test-only repair is integrated at `8786aa6`, and its
-  local package check passed. The final integration-head status is maintained
-  in the Ticket 20 release-validation comment and linked PR checks.
+  local package check passed. Results for integration head `fd29b23` are
+  maintained in the Ticket 20 release-validation comment and linked PR checks.
 - Regression coverage exercises dangling/external opaque-link root, add, and
   delete seeds; safe source-link chains as importer and target; fail-closed
   dangling/external/cyclic source aliases with atomic CLI output; and gitlinks
   without fetching. Focused analyzer and CLI regressions and `pnpm verify:fast`
   passed locally; the aggregate local `pnpm verify:full` exit status was not
-  captured. Final integration-head results are maintained in the Ticket 20
+  captured. Integration-head results for `fd29b23` are maintained in the Ticket 20
   release-validation comment and linked PR checks.
 
 The integrated changes and measured evidence are recorded in
-[`Ticket 08 verification`](../verification/ticket-08.md). No runtime code changed
-after the reviewed release pin. Final CI status is tracked in the Ticket 20
-release-validation comment and linked PR checks. No npm package was published.
+[`Ticket 08 verification`](../verification/ticket-08.md). The statement that no
+runtime code changed after the reviewed release pin applies to integration head
+`fd29b23ddadc629e1afb2683366321ba2206ba7a`; candidate `5185800` changes runtime
+behavior for the final PR #21 findings and their Spec repair. Final acceptance
+remains maintained in the Ticket 20 release-validation comment and linked PR
+checks while candidate review, QA, and CI complete. No npm package was published.
