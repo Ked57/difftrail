@@ -451,8 +451,14 @@ try {
     autoImportOptionsFixture,
   ).trim();
   const installedBaseGap = spawnSync(
-    bin,
-    ['--base', unsupportedOptionsBase, '--head', literalOptionsHead],
+    process.execPath,
+    [
+      join(packageRoot, 'dist', 'cli.js'),
+      '--base',
+      unsupportedOptionsBase,
+      '--head',
+      literalOptionsHead,
+    ],
     { cwd: autoImportOptionsFixture, encoding: 'utf8' },
   );
   assert.equal(installedBaseGap.status, 1);
