@@ -184,6 +184,7 @@ test('resolves each pnpm workspace importer and rejects missing or mismatched in
   }
 }, 30_000);
 
+// Snapshot extraction can exceed Vitest's 5s default on Windows CI.
 test('attributes dependency evidence gaps to a source that imports that dependency', async () => {
   const lock = [
     'lockfileVersion: 9.0',
@@ -253,7 +254,7 @@ test('attributes dependency evidence gaps to a source that imports that dependen
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 function rootProviderLock(localProvider = false): string {
   const lines = [
@@ -323,6 +324,7 @@ async function rootProviderRepository() {
   return { repo, packageRoot, rootModules };
 }
 
+// Snapshot extraction can exceed Vitest's 5s default on Windows CI.
 test('resolves and validates an ancestor pnpm provider for an undeclared consumer', async () => {
   const { repo, packageRoot, rootModules } = await rootProviderRepository();
   try {
@@ -359,7 +361,7 @@ test('resolves and validates an ancestor pnpm provider for an undeclared consume
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('does not borrow a pnpm ancestor version when the consumer declares the dependency', async () => {
   const { repo, packageRoot, rootModules } = await rootProviderRepository();
@@ -458,6 +460,7 @@ async function inheritedConfigProviderRepository() {
   return { repo, packageRoot, packageLink };
 }
 
+// Snapshot extraction can exceed Vitest's 5s default on Windows CI.
 test('resolves inherited package tsconfig through validated ancestor evidence', async () => {
   const { repo, packageRoot, packageLink } =
     await inheritedConfigProviderRepository();
@@ -499,4 +502,4 @@ test('resolves inherited package tsconfig through validated ancestor evidence', 
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);

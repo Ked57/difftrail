@@ -122,6 +122,7 @@ test('retains TypeScript import, type, re-export, and literal dynamic relationsh
   }
 });
 
+// Snapshot extraction can exceed Vitest's 5s default on Windows CI.
 test('retains TypeScript import-equals and import type query relationships', async () => {
   const repo = await repository({
     'leaf.ts': 'export const value = 1;',
@@ -148,8 +149,9 @@ test('retains TypeScript import-equals and import type query relationships', asy
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
+// Snapshot extraction can exceed Vitest's 5s default on Windows CI.
 test('resolves inherited package aliases without a baseUrl', async () => {
   const repo = await repository({
     'base.json': JSON.stringify({
@@ -180,7 +182,7 @@ test('resolves inherited package aliases without a baseUrl', async () => {
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('resolves snapshot workspace exports and retains the manifests used', async () => {
   const repo = await repository({

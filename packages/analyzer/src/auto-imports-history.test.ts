@@ -149,6 +149,7 @@ function expectSnapshotMappingOwnership(
   }
 }
 
+// Two endpoint extractions can exceed Vitest's 5s default on Windows CI.
 test('tracks the recognized Vite component entrypoint through consumers and config provenance', async () => {
   const declaration = (target: string) =>
     [
@@ -223,8 +224,9 @@ test('tracks the recognized Vite component entrypoint through consumers and conf
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
+// Two endpoint extractions can exceed Vitest's 5s default on Windows CI.
 test('recognizes the Vite auto-import entrypoint and rejects missing metadata at either endpoint', async () => {
   const repo = await repository({
     'vite.config.ts': [
@@ -292,7 +294,7 @@ test('recognizes the Vite auto-import entrypoint and rejects missing metadata at
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('fails for a component usage that only an imported runtime resolver could map', async () => {
   const repo = await repository({
