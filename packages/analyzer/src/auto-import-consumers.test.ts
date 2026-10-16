@@ -80,6 +80,132 @@ test('gives setup bindings and registered Options API components local precedenc
   }
 }, 30_000);
 
+test('parses typed script registrations and transparent static export wrappers', async () => {
+  const repo = await repository({
+    'vite.config.ts': [
+      "import Components from 'unplugin-vue-components';",
+      "export default Components({ dts: 'components.d.ts' });",
+    ].join('\n'),
+    'components.d.ts': [
+      "declare module 'vue' {",
+      '  export interface GlobalComponents {',
+      "    AutoButton: typeof import('./GlobalButton.vue')['default']",
+      '  }',
+      '}',
+    ].join('\n'),
+    'GlobalButton.vue': '<template><button>Global</button></template>',
+    'AliasButton.vue': '<template><button>Alias</button></template>',
+    'pages/parenthesized-options.vue': [
+      '<script lang="ts">',
+      "import AliasButton from '../AliasButton.vue';",
+      'export default (({ components: { AutoButton: AliasButton } }));',
+      '</script>',
+      '<template><AutoButton /></template>',
+    ].join('\n'),
+    'pages/asserted-options.vue': [
+      '<script lang="ts">',
+      "import AliasButton from '../AliasButton.vue';",
+      'export default ({ components: { AutoButton: AliasButton } } as const);',
+      '</script>',
+      '<template><AutoButton /></template>',
+    ].join('\n'),
+    'pages/satisfies-options.vue': [
+      '<script lang="ts">',
+      "import AliasButton from '../AliasButton.vue';",
+      'export default ({ components: { AutoButton: AliasButton } } satisfies Record<string, unknown>);',
+      '</script>',
+      '<template><AutoButton /></template>',
+    ].join('\n'),
+    'pages/wrapped.vue': [
+      '<script>',
+      "import { wrap } from '../wrappers';",
+      "import LocalButton from '../AliasButton.vue';",
+      'export default wrap({ components: { AutoButton: LocalButton } });',
+      '</script>',
+      '<template><AutoButton /></template>',
+    ].join('\n'),
+    'wrappers.ts': 'export const wrap = (options: unknown) => options;',
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const edges = await autoImportEdges(comparison.headSnapshot);
+      expect(edges).toContainEqual(
+        expect.objectContaining({
+          importer: 'pages/wrapped.vue',
+          dependency: 'GlobalButton.vue',
+          kind: 'auto-import',
+        }),
+      );
+      expect(
+        edges.filter(
+          (edge) =>
+            edge.kind === 'auto-import' &&
+            edge.dependency === 'GlobalButton.vue' &&
+            edge.importer !== 'pages/wrapped.vue',
+        ),
+      ).toEqual([]);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+}, 30_000);
+
+test('uses declared TS and JSX modes for script registration parsing', async () => {
+  const repo = await repository({
+    'vite.config.ts': [
+      "import Components from 'unplugin-vue-components';",
+      "export default Components({ dts: 'components.d.ts' });",
+    ].join('\n'),
+    'components.d.ts': [
+      "declare module 'vue' {",
+      '  export interface GlobalComponents {',
+      "    AutoButton: typeof import('./GlobalButton.vue')['default']",
+      '  }',
+      '}',
+    ].join('\n'),
+    'GlobalButton.vue': '<template><button>Global</button></template>',
+    'AliasButton.vue': '<template><button>Alias</button></template>',
+    'pages/typescript.vue': [
+      '<script lang="ts">',
+      "import { defineComponent as defineVueComponent } from 'vue';",
+      "import AliasButton from '../AliasButton.vue';",
+      "import type { PropType } from 'vue';",
+      'export default defineVueComponent<{ value: string }>({ components: { AutoButton: AliasButton as PropType<unknown> } });',
+      '</script>',
+      '<template><AutoButton /></template>',
+    ].join('\n'),
+    'pages/tsx.vue': [
+      '<script lang="tsx">',
+      "import { defineComponent as defineVueComponent } from 'vue';",
+      "import AliasButton from '../AliasButton.vue';",
+      'export default defineVueComponent<{ value: string }>({ components: { AutoButton: AliasButton } });',
+      '</script>',
+      '<template><AutoButton /></template>',
+    ].join('\n'),
+    'pages/jsx.vue': [
+      '<script lang="jsx">',
+      "import AliasButton from '../AliasButton.vue';",
+      'export default { components: { AutoButton: AliasButton } };',
+      '</script>',
+      '<template><AutoButton /></template>',
+    ].join('\n'),
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const edges = await autoImportEdges(comparison.headSnapshot);
+      expect(
+        edges.filter(
+          (edge) =>
+            edge.kind === 'auto-import' &&
+            edge.dependency === 'GlobalButton.vue',
+        ),
+      ).toEqual([]);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+}, 30_000);
+
 test('keeps nested script bindings out of the Vue template scope', async () => {
   const repo = await repository({
     'vite.config.ts': [

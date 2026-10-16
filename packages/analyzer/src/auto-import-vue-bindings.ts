@@ -4,21 +4,25 @@ import ts from 'typescript';
 export function localComponentNames(descriptor: SFCDescriptor): string[] {
   return [
     ...(descriptor.scriptSetup && !descriptor.scriptSetup.src
-      ? setupBindings(descriptor.scriptSetup.content)
+      ? setupBindings(
+          descriptor.scriptSetup.content,
+          descriptor.scriptSetup.lang,
+        )
       : []),
     ...(descriptor.script && !descriptor.script.src
-      ? registeredComponentNames(descriptor.script.content)
+      ? registeredComponentNames(
+          descriptor.script.content,
+          descriptor.script.lang,
+        )
       : []),
   ];
 }
 
-function setupBindings(content: string): string[] {
-  const file = ts.createSourceFile(
-    'component.ts',
-    content,
-    ts.ScriptTarget.Latest,
-    true,
-  );
+function setupBindings(
+  content: string,
+  language: string | undefined,
+): string[] {
+  const file = parseScript(content, language);
   return file.statements.flatMap((statement) => {
     if (ts.isImportDeclaration(statement))
       return importBindings(statement.importClause);
@@ -58,23 +62,23 @@ function bindingNames(name: ts.BindingName): string[] {
   );
 }
 
-function registeredComponentNames(content: string): string[] {
-  const file = ts.createSourceFile(
-    'component.js',
-    content,
-    ts.ScriptTarget.Latest,
-    true,
-  );
+function registeredComponentNames(
+  content: string,
+  language: string | undefined,
+): string[] {
+  const file = parseScript(content, language);
   const exported = file.statements.find(
     (statement): statement is ts.ExportAssignment =>
       ts.isExportAssignment(statement) && !statement.isExportEquals,
   );
   if (!exported) return [];
-  const root = exported.expression;
+  const root = unwrapSyntaxExpression(exported.expression);
   const options = ts.isObjectLiteralExpression(root)
     ? root
     : ts.isCallExpression(root) && isVueDefineComponent(file, root)
       ? root.arguments[0]
+        ? unwrapSyntaxExpression(root.arguments[0])
+        : undefined
       : undefined;
   if (!options || !ts.isObjectLiteralExpression(options)) return [];
   const components = options.properties.find(
@@ -98,8 +102,9 @@ function isVueDefineComponent(
   file: ts.SourceFile,
   call: ts.CallExpression,
 ): boolean {
-  if (!ts.isIdentifier(call.expression)) return false;
-  const localName = call.expression.text;
+  const callee = unwrapSyntaxExpression(call.expression);
+  if (!ts.isIdentifier(callee)) return false;
+  const localName = callee.text;
   return file.statements.some(
     (statement) =>
       ts.isImportDeclaration(statement) &&
@@ -108,6 +113,36 @@ function isVueDefineComponent(
       !statement.importClause?.isTypeOnly &&
       namedVueDefineComponent(statement.importClause, localName),
   );
+}
+
+function parseScript(content: string, language: string | undefined) {
+  const typed = language === 'ts' || language === 'tsx';
+  const jsx = language === 'jsx' || language === 'tsx';
+  return ts.createSourceFile(
+    `component.${typed ? (jsx ? 'tsx' : 'ts') : jsx ? 'jsx' : 'js'}`,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    typed
+      ? jsx
+        ? ts.ScriptKind.TSX
+        : ts.ScriptKind.TS
+      : jsx
+        ? ts.ScriptKind.JSX
+        : ts.ScriptKind.JS,
+  );
+}
+
+function unwrapSyntaxExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isTypeAssertionExpression(current)
+  )
+    current = current.expression;
+  return current;
 }
 
 function namedVueDefineComponent(
