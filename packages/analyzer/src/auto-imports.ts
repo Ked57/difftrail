@@ -217,6 +217,13 @@ function recordMetadataPath(
     result.missingMetadata.set(config, metadata);
 }
 
+const supportedPluginImports = new Map<string, 'components' | 'auto-import'>([
+  ['unplugin-vue-components', 'components'],
+  ['unplugin-vue-components/vite', 'components'],
+  ['unplugin-auto-import', 'auto-import'],
+  ['unplugin-auto-import/vite', 'auto-import'],
+]);
+
 function pluginImports(
   file: ts.SourceFile,
 ): Map<string, 'components' | 'auto-import'> {
@@ -227,12 +234,7 @@ function pluginImports(
       !ts.isStringLiteral(statement.moduleSpecifier)
     )
       continue;
-    const plugin =
-      statement.moduleSpecifier.text === 'unplugin-vue-components'
-        ? 'components'
-        : statement.moduleSpecifier.text === 'unplugin-auto-import'
-          ? 'auto-import'
-          : undefined;
+    const plugin = supportedPluginImports.get(statement.moduleSpecifier.text);
     if (!plugin || !statement.importClause) continue;
     if (statement.importClause.name)
       result.set(statement.importClause.name.text, plugin);

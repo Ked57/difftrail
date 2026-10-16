@@ -215,6 +215,7 @@ try {
     }),
   );
   await writeFile(join(pluginRoot, 'index.js'), 'module.exports = () => ({});');
+  await writeFile(join(pluginRoot, 'vite.js'), 'module.exports = () => ({});');
   await writeFile(
     join(autoImportFixture, 'node_modules/.package-lock.json'),
     JSON.stringify(pluginLock),
@@ -238,30 +239,72 @@ try {
     run('git', ['commit', '--quiet', '-m', message], autoImportFixture);
     return run('git', ['rev-parse', 'HEAD'], autoImportFixture).trim();
   };
-  await commitAutoImport(
+  const baselineAutoImport = await commitAutoImport(
     {
       'vite.config.mjs': [
-        "import Components from 'unplugin-vue-components';",
-        "export default Components({ dts: 'generated/components.d.ts' });",
+        "import Components from 'unplugin-vue-components/vite';",
+        "export default Components({ dirs: ['./src/components/auto-primary'], dts: 'generated/components.d.ts' });",
       ].join('\n'),
       'generated/components.d.ts': declaration('../src/AutoButton.vue'),
-      'src/AutoButton.vue': '<template><button>Mapped</button></template>',
+      'src/AutoButton.vue': '<template><button><slot /></button></template>',
       'elsewhere/AutoButton.vue':
         '<template><button>Same name</button></template>',
       'pages/checkout.vue': '<template><AutoButton /></template>',
+      'pages/settings.vue': '<template><main>Independent</main></template>',
+      'src/App.vue': [
+        '<script setup>',
+        "import Checkout from '../pages/checkout.vue';",
+        '</script>',
+        '<template><Checkout /></template>',
+      ].join('\n'),
+      'src/main.ts': "import App from './App.vue';\nvoid App;",
     },
     'baseline auto-import mapping',
   );
-  await commitAutoImport(
+  const mappedAutoImport = await commitAutoImport(
     {
       'generated/components.d.ts': declaration('../elsewhere/AutoButton.vue'),
     },
     'change only the auto-import mapping',
   );
-  assert.equal(
-    run(bin, [], autoImportFixture),
-    'generated/components.d.ts\npages/checkout.vue\n',
+  assert.deepEqual(
+    run(
+      bin,
+      ['--base', baselineAutoImport, '--head', mappedAutoImport],
+      autoImportFixture,
+    )
+      .trim()
+      .split('\n'),
+    [
+      'generated/components.d.ts',
+      'pages/checkout.vue',
+      'src/App.vue',
+      'src/main.ts',
+    ],
   );
+  const configOnlyAutoImport = await commitAutoImport(
+    {
+      'vite.config.mjs': [
+        "import Components from 'unplugin-vue-components/vite';",
+        "export default Components({ dirs: ['./src/components/auto-alternate'], dts: 'generated/components.d.ts' });",
+      ].join('\n'),
+    },
+    'change only the component plugin configuration',
+  );
+  const configOnlyResult = JSON.parse(
+    run(
+      bin,
+      ['--base', mappedAutoImport, '--head', configOnlyAutoImport, '--json'],
+      autoImportFixture,
+    ),
+  );
+  assert.deepEqual(configOnlyResult.files, [
+    'pages/checkout.vue',
+    'src/App.vue',
+    'src/main.ts',
+    'vite.config.mjs',
+  ]);
+  assert.ok(!configOnlyResult.files.includes('pages/settings.vue'));
   const headGap = await commitAutoImport(
     { 'pages/checkout.vue': '<template><remote-widget /></template>' },
     'introduce a runtime-only auto-import gap',
