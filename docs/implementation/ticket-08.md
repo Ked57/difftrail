@@ -25,4 +25,13 @@ Status: implementation and local release checks in progress. Integration base:
   packed parser dependencies against conflicting consumer parsers.
 - Read-only `npm view difftrail name version --json` returned E404 on
   2026-10-16. This does not reserve the name.
-- Remote OS/runtime matrix and required full/mutation gates are still pending.
+- Remote OS/runtime matrix at the first pin found that Windows checkout line
+  endings made Prettier report every text file as unformatted before later
+  gates ran. The follow-up `.gitattributes` repair sets LF for detected text
+  files while preserving binary detection. A local checkout simulation with
+  `core.autocrlf=true` passes the unchanged Prettier gate; the full remote
+  matrix must be rerun after this repair.
+- The Ubuntu Node 22 mutation job passed on the first dispatch. The local
+  `pnpm verify:full` gate passed on macOS Node `22.23.1`, including 60 unit
+  tests, 39 CLI integration tests, all 9 isolated example histories, isolated
+  npm/pnpm packed consumers, and Knip. The OS/runtime matrix remains pending.
