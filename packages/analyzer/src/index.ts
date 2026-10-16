@@ -18,7 +18,7 @@ import {
 } from './external-config.js';
 import type { ValidatedConfigRoot } from './config.js';
 import { autoImportEdges } from './auto-imports.js';
-import { localReferenceEdges } from './local.js';
+import { configuredSymlinkEdges, localReferenceEdges } from './local.js';
 import { analysisGap as gap } from './errors.js';
 import { resolvedEdges } from './resolved-edges.js';
 import {
@@ -198,6 +198,12 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
     requiredSpecifiers,
     resolution.configRootsBySource,
   );
+  const configuredLinks = configuredSymlinkEdges(
+    snapshot,
+    sources,
+    requiredSpecifiers,
+    resolution.configRootsBySource,
+  );
   const autoImports = await autoImportEdges(snapshot, localEdges);
   const extracted = await extractModules(
     snapshot,
@@ -210,6 +216,7 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
     extracted.modules,
     requiredSpecifiers,
     resolution,
+    configuredLinks,
   );
   edges.push(...extracted.configurationEdges, ...localEdges);
   edges.push(
