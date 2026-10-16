@@ -18,6 +18,12 @@
       "entry": ["src/cli.ts", "tests/parser-smoke.mjs"],
       "project": ["src/**/*.ts", "tests/**/*.mjs"]
     },
-    "apps/*": {}
+    "apps/*": {},
+    "apps/test-app": {
+      "entry": [
+        "src/external/greeting-card.js",
+        "src/components/auto-alternate/AutoBadge.vue"
+      ]
+    }
   }
 }
