@@ -274,7 +274,10 @@ async function resolveCommit(
 }
 async function firstParent(root: string, head: string): Promise<string | null> {
   const commit = (await git(root, ['cat-file', '-p', head])).toString();
-  const parent = /^parent ([0-9a-f]+)$/m.exec(commit)?.[1];
+  const headerBoundary = commit.search(/\r?\n\r?\n/);
+  const headers =
+    headerBoundary === -1 ? commit : commit.slice(0, headerBoundary);
+  const parent = /^parent ([0-9a-f]+)$/m.exec(headers)?.[1];
   if (!parent) return null;
   return resolveCommit(root, parent, 'first parent');
 }
