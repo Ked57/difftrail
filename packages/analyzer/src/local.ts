@@ -124,7 +124,19 @@ async function externalTemplateEdges(
   tracked: ReadonlySet<string>,
 ): Promise<DependencyEdge[]> {
   const source = await readFile(resolve(snapshot.directory, importer), 'utf8');
-  return templateReferences(source)
+  let references: ReturnType<typeof templateReferences>;
+  try {
+    references = templateReferences(source);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Analysis gap'))
+      throw error;
+    throw gap(
+      snapshot,
+      importer,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  return references
     .filter((reference) => !isTerminal(reference.specifier))
     .map((reference) => {
       const dependency = resolveReference(
