@@ -1,8 +1,11 @@
 # Ticket 08 implementation
 
-Status: implementation and local release checks in progress. Integration base:
-`50e0329` (Ticket 07 app plus verification record). This work is isolated on
-`codex/ticket-08-release`.
+Status: implementation merged into `codex/difftrail-cli` at
+`fd29b23ddadc629e1afb2683366321ba2206ba7a`, including reviewed release pin
+`07679254b837fdf127681a59cfb7561e64aecea4` and reviewed test-only package
+harness repair `8786aa6134cba57600aa72eb87f855e25052931d`. Final-head matrix
+evidence and acceptance remain pending; issue #20 remains open and PR #21
+remains draft.
 
 ## Changes
 
@@ -35,17 +38,29 @@ Status: implementation and local release checks in progress. Integration base:
   files while preserving binary detection. A local checkout simulation with
   `core.autocrlf=true` passes the unchanged Prettier gate; the full remote
   matrix must be rerun after this repair.
-- The Ubuntu Node 22 mutation job passed on the first dispatch. The local
-  `pnpm verify:full` gate passed on macOS Node `22.23.1`, including 60 unit
-  tests, 39 CLI integration tests, all 9 isolated example histories, isolated
-  npm/pnpm packed consumers, and Knip. The OS/runtime matrix remains pending.
+- The Ubuntu Node 22 mutation job passed on the first dispatch. On macOS Node
+  `22.23.1`, the recorded unit, CLI integration, example-history, package, and
+  Knip components passed individually. The original aggregate
+  `pnpm verify:full` exit status was not captured, so it is not claimed as an
+  aggregate pass. The final release-pin matrix passed macOS/Linux and mutation;
+  its four Windows cells failed and are under diagnosis.
 - The second matrix exposed Windows-only virtual-path and diagnostic separator
   failures. `path.posix` now handles the synthetic snapshot root, while
   configured path separators are normalized using the Windows host separator
-  only; error display normalizes only native Windows separators. The following
-  combined repair pin will rerun the entire remote matrix.
+  only; error display normalizes only native Windows separators. These repairs
+  are included in the reviewed release pin. The Windows matrix at that pin
+  reached and passed the runtime, unit, integration, and example-history jobs,
+  then exposed a spaced-Git-argument issue in the package-test helper. The
+  independently reviewed test-only repair is integrated at `8786aa6`, and its
+  local package check passed. Final-head matrix results remain pending.
 - Regression coverage exercises dangling/external opaque-link root, add, and
   delete seeds; safe source-link chains as importer and target; fail-closed
   dangling/external/cyclic source aliases with atomic CLI output; and gitlinks
   without fetching. Focused analyzer and CLI regressions and `pnpm verify:fast`
   pass locally; the final `pnpm verify:full` and remote matrix remain pending.
+
+The integrated changes and measured evidence are recorded in
+[`Ticket 08 verification`](../verification/ticket-08.md). No runtime code changed
+after the reviewed release pin. The remaining acceptance gate is actual final
+integration-head CI across the configured OS/runtime matrix, followed by final
+readiness review. No npm package was published.
