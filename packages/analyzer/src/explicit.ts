@@ -13,11 +13,12 @@ import valueParser from 'postcss-value-parser';
 import ts from 'typescript';
 import type { Snapshot } from '@difftrail/git';
 import type { SourceRelationship } from './source.js';
-import { commonJsLoader } from './require.js';
+import { commonJsLoader, factoryGap } from './require.js';
 
 export interface ExplicitInspection {
   readonly moduleRelationships: readonly SourceRelationship[];
   readonly localReferences: readonly SourceRelationship[];
+  readonly loaderNames: ReadonlySet<string>;
 }
 
 const assetAttributes = new Set([
@@ -37,8 +38,16 @@ export async function inspectExplicitSource(
   const source = await readFile(join(snapshot.directory, file), 'utf8');
   if (file.endsWith('.vue')) return inspectVue(source, file);
   if (/\.(?:css|scss|sass|less)$/.test(file))
-    return { moduleRelationships: [], localReferences: inspectCss(source) };
-  return { moduleRelationships: [], localReferences: [] };
+    return {
+      moduleRelationships: [],
+      localReferences: inspectCss(source),
+      loaderNames: new Set(),
+    };
+  return {
+    moduleRelationships: [],
+    localReferences: [],
+    loaderNames: new Set(),
+  };
 }
 
 function inspectVue(source: string, file: string): ExplicitInspection {
@@ -48,6 +57,7 @@ function inspectVue(source: string, file: string): ExplicitInspection {
 
   const moduleRelationships: SourceRelationship[] = [];
   const localReferences: SourceRelationship[] = [];
+  const loaderNames = new Set<string>();
   const descriptor = parsed.descriptor;
   for (const block of [descriptor.script, descriptor.scriptSetup]) {
     if (!block) continue;
@@ -57,7 +67,9 @@ function inspectVue(source: string, file: string): ExplicitInspection {
     }
     if (block.lang && !['js', 'jsx', 'ts', 'tsx'].includes(block.lang))
       throw new Error(`unsupported Vue script language ${block.lang}`);
-    moduleRelationships.push(...scriptRelationships(block.content, block.lang));
+    const script = scriptRelationships(block.content, block.lang);
+    moduleRelationships.push(...script.relationships);
+    for (const name of script.loaderNames) loaderNames.add(name);
   }
   if (descriptor.template?.src)
     localReferences.push({
@@ -73,13 +85,18 @@ function inspectVue(source: string, file: string): ExplicitInspection {
     }
     localReferences.push(...inspectCss(style.content));
   }
-  return { moduleRelationships, localReferences };
+  return { moduleRelationships, localReferences, loaderNames };
+}
+
+interface ScriptInspection {
+  readonly relationships: SourceRelationship[];
+  readonly loaderNames: ReadonlySet<string>;
 }
 
 function scriptRelationships(
   source: string,
   language: string | undefined,
-): SourceRelationship[] {
+): ScriptInspection {
   const typed = language === 'ts' || language === 'tsx';
   const jsx = language === 'jsx' || language === 'tsx';
   const filename = resolve(`__difftrail_component__.${typed ? 'ts' : 'js'}`);
@@ -127,14 +144,24 @@ function scriptRelationships(
 function collectScriptRelationships(
   file: ts.SourceFile,
   checker: ts.TypeChecker,
-): SourceRelationship[] {
+): ScriptInspection {
   const relationships: SourceRelationship[] = [];
+  const loaderNames = new Set<string>();
   function visit(node: ts.Node): void {
+    const unsupportedFactory = factoryGap(node, checker);
+    if (unsupportedFactory) throw new Error(unsupportedFactory);
     relationships.push(...scriptNodeRelationships(node, checker));
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      commonJsLoader(node.expression, checker) &&
+      node.expression.text !== 'require'
+    )
+      loaderNames.add(node.expression.text);
     ts.forEachChild(node, visit);
   }
   visit(file);
-  return relationships;
+  return { relationships, loaderNames };
 }
 
 function scriptNodeRelationships(
