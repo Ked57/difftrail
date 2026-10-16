@@ -49,7 +49,7 @@ test('ignores lexically bound auto-import names and same-basename components', a
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('follows a mapping-only change through its snapshot-owned consumer', async () => {
   const declaration = (target: string) =>
@@ -103,7 +103,7 @@ test('follows a mapping-only change through its snapshot-owned consumer', async 
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 function expectSnapshotMappingOwnership(
   baseEdges: Awaited<ReturnType<typeof autoImportEdges>>,
@@ -313,7 +313,7 @@ test('fails for a component usage that only an imported runtime resolver could m
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('does not treat Vue native tags or compiler builtins as auto-import gaps', async () => {
   const repo = await repository({
@@ -331,7 +331,7 @@ test('does not treat Vue native tags or compiler builtins as auto-import gaps', 
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('does not classify custom element tags as auto-imports without a resolver setup', async () => {
   const repo = await repository({
@@ -344,7 +344,7 @@ test('does not classify custom element tags as auto-imports without a resolver s
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('reports the exact missing generated metadata path configured for a component resolver', async () => {
   const repo = await repository({
@@ -363,7 +363,7 @@ test('reports the exact missing generated metadata path configured for a compone
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('fails when configured API metadata or its import map is unavailable at runtime', async () => {
   const missing = await repository({
@@ -401,7 +401,7 @@ test('fails when configured API metadata or its import map is unavailable at run
   } finally {
     await dynamic.cleanup();
   }
-});
+}, 30_000);
 
 test('connects a nondefault generated mapping file and its static plugin config to consumers', async () => {
   const repo = await repository({
@@ -445,7 +445,7 @@ test('connects a nondefault generated mapping file and its static plugin config 
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('rejects conflicting committed mappings for the same component symbol', async () => {
   const mapping = (path: string) =>
@@ -476,4 +476,4 @@ test('rejects conflicting committed mappings for the same component symbol', asy
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);

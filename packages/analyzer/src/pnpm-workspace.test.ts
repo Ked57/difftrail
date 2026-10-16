@@ -19,7 +19,7 @@ test('does not require package manifests for sources without external requests',
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 const packages = [
   { app: 'first', link: 'external-leaf', version: '1.2.3' },
@@ -392,7 +392,7 @@ test('does not borrow a pnpm ancestor version when the consumer declares the dep
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 async function inheritedConfigProviderRepository() {
   const lock = [

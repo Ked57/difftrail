@@ -26,7 +26,7 @@ test('extracts real committed JS dependencies without current checkout changes',
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('preserves safe tracked source symlink identity for importers and targets', async () => {
   const repo = await repository({
@@ -59,7 +59,7 @@ test('preserves safe tracked source symlink identity for importers and targets',
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('extracts TypeScript imports from the committed snapshot', async () => {
   const repo = await repository({
@@ -81,7 +81,7 @@ test('extracts TypeScript imports from the committed snapshot', async () => {
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('retains TypeScript import, type, re-export, and literal dynamic relationships', async () => {
   const repo = await repository({
@@ -120,7 +120,7 @@ test('retains TypeScript import, type, re-export, and literal dynamic relationsh
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 // Snapshot extraction can exceed Vitest's 5s default on Windows CI.
 test('retains TypeScript import-equals and import type query relationships', async () => {
@@ -236,7 +236,7 @@ test('resolves snapshot workspace exports and retains the manifests used', async
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test.each([
   ['invalid syntax', 'export const = 1;', 'consumer.js'],
@@ -335,7 +335,7 @@ test('accepts a pnpm v9 installed package only with matching committed lock evid
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('analyzes explicit tracked ignored and dependency-directory entries', async () => {
   const repo = await repository({
@@ -369,7 +369,7 @@ test('analyzes explicit tracked ignored and dependency-directory entries', async
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('cleans isolated snapshot storage after both successful and failed extraction callbacks', async () => {
   const repo = await repository({ 'file.js': 'export const value=1;' });
@@ -391,7 +391,7 @@ test('cleans isolated snapshot storage after both successful and failed extracti
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('distinguishes lexically bound require helpers from genuine CommonJS imports', async () => {
   const repo = await repository({
@@ -428,7 +428,7 @@ test('distinguishes lexically bound require helpers from genuine CommonJS import
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('retains Node createRequire bindings with the owning import.meta.url base', async () => {
   const repo = await repository({
@@ -455,4 +455,4 @@ test('retains Node createRequire bindings with the owning import.meta.url base',
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
