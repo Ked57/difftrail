@@ -10,7 +10,7 @@ npx difftrail --null
 npx difftrail --json --explain --filter '**/*.test.ts'
 ```
 
-Requires Git and Node 22.13+ or Node 24. By default, compares `HEAD` with its first parent; a genuine root commit uses an empty base. Use `--base A [--head B]` for direct endpoint comparison or add `--merge-base` to compare from the common ancestor. Change seeds come from the net endpoint difference, with both names of renames retained; dirty working-tree changes are ignored. Required unsupported syntax or unresolved dependencies fail with status 1 and no stdout.
+Requires Git and Node 22.18+ or Node 24.11+. By default, compares `HEAD` with its first parent; a genuine root commit uses an empty base. Use `--base A [--head B]` for direct endpoint comparison or add `--merge-base` to compare from the common ancestor. Change seeds come from the net endpoint difference, with both names of renames retained; dirty working-tree changes are ignored. Required unsupported syntax or unresolved dependencies fail with status 1 and no stdout.
 
 Default output is sorted repository-relative existing impacted files, one per line; an empty result writes no bytes. `--null` uses NUL delimiters, including after the last path, so spaces and line breaks remain unambiguous. `--json` adds `root`, resolved `base`/`head`, `scope: "static"`, `files` and `removed`. `--explain` adds shortest endpoint-specific witness chains and requires `--json`.
 
