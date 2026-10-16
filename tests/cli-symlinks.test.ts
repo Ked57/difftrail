@@ -106,6 +106,78 @@ test.each([
   },
 );
 
+// Windows filesystems cannot represent a literal backslash inside a filename.
+test.skipIf(process.platform === 'win32')(
+  'built CLI preserves literal backslashes in source identity and dependency closure',
+  async () => {
+    const repo = await repository({
+      'deps/back.ts': 'export const back = 1;\n',
+      'deps/slash.ts': 'export const slash = 1;\n',
+      'odd/back\\slash.ts':
+        "import {back} from '../deps/back'; export const value = back;\n",
+      'odd/back/slash.ts':
+        "import {slash} from '../../deps/slash'; export const value = slash;\n",
+    });
+    try {
+      const base = repo.git('rev-parse', 'HEAD');
+      await writeFile(
+        join(repo.root, 'deps/back.ts'),
+        'export const back = 2;\n',
+      );
+      repo.git('add', '--all');
+      repo.git('commit', '--quiet', '-m', 'change back dependency');
+      const backHead = repo.git('rev-parse', 'HEAD');
+      const result = cli(
+        repo.root,
+        '--base',
+        base,
+        '--head',
+        backHead,
+        '--json',
+        '--explain',
+      );
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+      const output = JSON.parse(result.stdout);
+      expect(output.files).toEqual(['deps/back.ts', 'odd/back\\slash.ts']);
+      expect(
+        output.explanations.find(
+          (item: { file: string }) => item.file === 'odd/back\\slash.ts',
+        ).chain,
+      ).toEqual(['deps/back.ts', 'odd/back\\slash.ts']);
+
+      await writeFile(
+        join(repo.root, 'deps/slash.ts'),
+        'export const slash = 2;\n',
+      );
+      repo.git('add', '--all');
+      repo.git('commit', '--quiet', '-m', 'change slash dependency');
+      const slashHead = repo.git('rev-parse', 'HEAD');
+      const slashResult = cli(
+        repo.root,
+        '--base',
+        backHead,
+        '--head',
+        slashHead,
+        '--json',
+        '--explain',
+      );
+      expect(slashResult.status).toBe(0);
+      expect(slashResult.stderr).toBe('');
+      const slashOutput = JSON.parse(slashResult.stdout);
+      expect(slashOutput.files).toEqual(['deps/slash.ts', 'odd/back/slash.ts']);
+      expect(slashOutput.files).not.toContain('odd/back\\slash.ts');
+      expect(
+        slashOutput.explanations.find(
+          (item: { file: string }) => item.file === 'odd/back/slash.ts',
+        ).chain,
+      ).toEqual(['deps/slash.ts', 'odd/back/slash.ts']);
+    } finally {
+      await repo.cleanup();
+    }
+  },
+);
+
 test('built CLI reports a Git submodule entry without fetching it', async () => {
   const repo = await repository({ 'README.md': 'tracked seed' });
   try {

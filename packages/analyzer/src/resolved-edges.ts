@@ -1,4 +1,4 @@
-import { isAbsolute, posix, relative, resolve } from 'node:path';
+import { isAbsolute, posix, relative, resolve, sep } from 'node:path';
 import { lstat, realpath } from 'node:fs/promises';
 import { type IModule } from 'dependency-cruiser';
 import type { DependencyEdge } from '@difftrail/core';
@@ -58,12 +58,11 @@ export async function resolvedEdges(
 }
 
 function repositoryPath(snapshot: Snapshot, path: string): string {
-  return relative(
+  const local = relative(
     snapshot.directory,
     isAbsolute(path) ? path : resolve(snapshot.directory, path),
-  )
-    .split('\\')
-    .join('/');
+  );
+  return sep === '\\' ? local.split(sep).join('/') : local;
 }
 
 function resolvedRelationships(
