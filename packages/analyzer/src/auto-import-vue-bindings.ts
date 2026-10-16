@@ -1,24 +1,32 @@
 import type { SFCDescriptor } from '@vue/compiler-sfc';
 import ts from 'typescript';
 
-export function localComponentNames(descriptor: SFCDescriptor): string[] {
-  return [
-    ...(descriptor.scriptSetup && !descriptor.scriptSetup.src
-      ? setupBindings(
+export function localComponentBindings(descriptor: SFCDescriptor): {
+  names: string[];
+  setupBindings: string[];
+} {
+  const setupBindings =
+    descriptor.scriptSetup && !descriptor.scriptSetup.src
+      ? setupBindingNames(
           descriptor.scriptSetup.content,
           descriptor.scriptSetup.lang,
         )
-      : []),
-    ...(descriptor.script && !descriptor.script.src
-      ? registeredComponentNames(
-          descriptor.script.content,
-          descriptor.script.lang,
-        )
-      : []),
-  ];
+      : [];
+  return {
+    names: [
+      ...setupBindings,
+      ...(descriptor.script && !descriptor.script.src
+        ? registeredComponentNames(
+            descriptor.script.content,
+            descriptor.script.lang,
+          )
+        : []),
+    ],
+    setupBindings,
+  };
 }
 
-function setupBindings(
+function setupBindingNames(
   content: string,
   language: string | undefined,
 ): string[] {

@@ -25,14 +25,18 @@ and the linked PR checks.
   produce a separate no-fetch diagnostic.
 - Integrated runtime revision `435ce747a0ea55c40bfbf327490c136ca0590b7f`
   includes the local Vue component, external-template, and bounded static
-  Options API registration repairs. Final PR #21 repair candidate
+  Options API registration repairs. Runtime candidate
   `dbd3f53b454c25443c1a3bc33ac4dd3cebf84105` additionally parses SFC scripts
   using their declared JS/JSX/TS/TSX language and recognizes static component
   options wrapped in parentheses, `as`, or `satisfies` expressions. Recognition
   remains limited to direct option objects or `defineComponent` imported from
-  `vue`; arbitrary wrappers remain unresolved. Focused auto-import regressions
-  and `pnpm verify:fast` passed with 69 unit tests. Current review, installed
-  CLI QA, and platform acceptance results are maintained in the [Ticket 20
+  `vue`; arbitrary wrappers remain unresolved. Candidate
+  `3d85daaa2746db31c60ccf28a36532a362239472` additionally recognizes a dotted
+  template tag as local when its root is a `<script setup>` binding, without
+  inspecting members; ordinary-script imports and Options API keys do not
+  qualify as namespace roots. Focused auto-import regressions and
+  `pnpm verify:fast` passed with 73 unit tests. Current review, installed CLI QA,
+  and platform acceptance results are maintained in the [Ticket 20
   release-validation comment](https://github.com/Ked57/difftrail/issues/20#issuecomment-6215990357)
   and linked PR checks.
 

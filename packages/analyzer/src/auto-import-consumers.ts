@@ -5,7 +5,7 @@ import type { Snapshot } from '@difftrail/git';
 import { isCoreComponent, parserOptions } from '@vue/compiler-dom';
 import { parse as parseSfc } from '@vue/compiler-sfc';
 import ts from 'typescript';
-import { localComponentNames } from './auto-import-vue-bindings.js';
+import { localComponentBindings } from './auto-import-vue-bindings.js';
 import { analysisGap as gap } from './errors.js';
 import { templateComponentNames } from './explicit.js';
 import type { AutoImportMapping, MappingCollection } from './auto-imports.js';
@@ -49,12 +49,21 @@ async function componentEdges(
         'utf8',
       );
     }
-    const localNames = new Set(
-      localComponentNames(parsed.descriptor).map(normalizeName),
+    const localComponents = localComponentBindings(parsed.descriptor);
+    const localNames = new Set(localComponents.names.map(normalizeName));
+    const setupBindings = new Set(
+      localComponents.setupBindings.map(normalizeName),
     );
     for (const tag of templateComponentNames(content))
       edges.push(
-        ...componentTagEdges(snapshot, path, tag, localNames, collection),
+        ...componentTagEdges(
+          snapshot,
+          path,
+          tag,
+          localNames,
+          setupBindings,
+          collection,
+        ),
       );
   }
   return edges;
@@ -65,9 +74,16 @@ function componentTagEdges(
   path: string,
   tag: string,
   localNames: ReadonlySet<string>,
+  setupBindings: ReadonlySet<string>,
   collection: MappingCollection,
 ): DependencyEdge[] {
-  if (localNames.has(normalizeName(tag))) return [];
+  const name = normalizeName(tag);
+  const separator = tag.indexOf('.');
+  if (
+    localNames.has(name) ||
+    (separator > 0 && setupBindings.has(normalizeName(tag.slice(0, separator))))
+  )
+    return [];
   const mapped = mappedEdges(snapshot, path, tag, collection);
   const reason = missingComponentMapping(path, tag, mapped, collection);
   if (reason) throw gap(snapshot, path, reason);

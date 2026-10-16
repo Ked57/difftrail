@@ -11,8 +11,12 @@ passed with 67 unit tests. Current candidate
 mode from the SFC script language and unwraps only parentheses, `as`,
 `satisfies`, and type-assertion wrappers around otherwise static options. Its
 focused auto-import regressions and `pnpm verify:fast` passed with 69 unit tests.
-Current review, installed CLI QA, and platform acceptance results are maintained
-in the [Ticket 20 release-validation
+Candidate `3d85daaa2746db31c60ccf28a36532a362239472` additionally treats a
+dotted tag as local when its root is bound in `<script setup>`, without
+evaluating members. Ordinary-script imports, Options API registration keys, and
+unbound roots retain mapping/gap behavior. Focused auto-import regressions and
+`pnpm verify:fast` passed with 73 unit tests. Current review, installed CLI QA,
+and platform acceptance results are maintained in the [Ticket 20 release-validation
 comment](https://github.com/Ked57/difftrail/issues/20#issuecomment-6215990357)
 and linked PR checks.
 
@@ -62,7 +66,10 @@ candidate `51858005eb7cf0666578030febaa9f7a91c2345e`, `pnpm verify:fast` passed
 with 67 unit tests. On current repair candidate
 `dbd3f53b454c25443c1a3bc33ac4dd3cebf84105`, the focused auto-import suites and
 `pnpm verify:fast` passed with 69 unit tests. The earlier unit counts remain
-historical for their exact pins. No new platform-matrix result is claimed here.
+historical for their exact pins. On candidate
+`3d85daaa2746db31c60ccf28a36532a362239472`, the focused auto-import suites and
+`pnpm verify:fast` passed with 73 unit tests. No new platform-matrix result is
+claimed here.
 The required platform matrix runs the full gate on macOS, Linux, and Windows at
 the minimum and current Node 22 and 24 releases (12 OS/runtime cells). Final
 acceptance remains maintained in the Ticket 20 release-validation comment and

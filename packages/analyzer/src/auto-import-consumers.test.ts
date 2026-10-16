@@ -5,6 +5,17 @@ import { autoImportEdges } from './auto-imports.js';
 import { localReferenceEdges } from './local.js';
 import { inspectSources } from './source.js';
 
+const resolverConfiguration = {
+  'vite.config.ts': [
+    "import Components from 'unplugin-vue-components';",
+    'export default Components({ dts: false, resolvers: [name => makeResolution(name)] });',
+  ].join('\n'),
+};
+
+async function repositoryWithResolver(files: Readonly<Record<string, string>>) {
+  return repository({ ...resolverConfiguration, ...files });
+}
+
 test('gives setup bindings and registered Options API components local precedence', async () => {
   const repo = await repository({
     'vite.config.ts': [
@@ -223,6 +234,86 @@ test('keeps nested script bindings out of the Vue template scope', async () => {
     await withComparison(repo.root, async (comparison) =>
       expect(autoImportEdges(comparison.headSnapshot)).rejects.toThrow(
         `Analysis gap in pages/page.vue at ${comparison.head}: component RemoteWidget has no committed static auto-import mapping`,
+      ),
+    );
+  } finally {
+    await repo.cleanup();
+  }
+}, 30_000);
+
+test('treats dotted component tags as local when their script setup root is bound', async () => {
+  const repo = await repositoryWithResolver({
+    'icons.ts': 'export const SomeIcon = {};',
+    'pages/local-namespaces.vue': [
+      '<script setup lang="ts">',
+      "import * as Icons from '../icons';",
+      'const Widgets = { Nested: { Item: {} } };',
+      '</script>',
+      '<template><Icons.SomeIcon /><Widgets.Nested.Item /></template>',
+    ].join('\n'),
+  });
+  try {
+    await withComparison(repo.root, async (comparison) => {
+      const edges = await autoImportEdges(comparison.headSnapshot);
+      expect(edges.filter((edge) => edge.kind === 'auto-import')).toEqual([]);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+}, 30_000);
+
+test('does not treat ordinary-script namespace imports as template bindings', async () => {
+  const repo = await repositoryWithResolver({
+    'icons.ts': 'export const SomeIcon = {};',
+    'pages/ordinary-script.vue': [
+      '<script lang="ts">',
+      "import * as Icons from '../icons';",
+      '</script>',
+      '<template><Icons.SomeIcon /></template>',
+    ].join('\n'),
+  });
+  try {
+    await withComparison(repo.root, async (comparison) =>
+      expect(autoImportEdges(comparison.headSnapshot)).rejects.toThrow(
+        `Analysis gap in pages/ordinary-script.vue at ${comparison.head}: component Icons.SomeIcon has no committed static auto-import mapping`,
+      ),
+    );
+  } finally {
+    await repo.cleanup();
+  }
+}, 30_000);
+
+test('does not treat an Options API component key as a script setup namespace', async () => {
+  const repo = await repositoryWithResolver({
+    'icons.ts': 'export const SomeIcon = {};',
+    'pages/options-namespace.vue': [
+      '<script lang="ts">',
+      "import * as Icons from '../icons';",
+      'export default { components: { Icons } };',
+      '</script>',
+      '<template><Icons.SomeIcon /></template>',
+    ].join('\n'),
+  });
+  try {
+    await withComparison(repo.root, async (comparison) =>
+      expect(autoImportEdges(comparison.headSnapshot)).rejects.toThrow(
+        `Analysis gap in pages/options-namespace.vue at ${comparison.head}: component Icons.SomeIcon has no committed static auto-import mapping`,
+      ),
+    );
+  } finally {
+    await repo.cleanup();
+  }
+}, 30_000);
+
+test('keeps unbound dotted component roots subject to the mapping gap policy', async () => {
+  const repo = await repositoryWithResolver({
+    'pages/unbound-namespace.vue':
+      '<template><UnknownWidget.Item /></template>',
+  });
+  try {
+    await withComparison(repo.root, async (comparison) =>
+      expect(autoImportEdges(comparison.headSnapshot)).rejects.toThrow(
+        `Analysis gap in pages/unbound-namespace.vue at ${comparison.head}: component UnknownWidget.Item has no committed static auto-import mapping`,
       ),
     );
   } finally {
