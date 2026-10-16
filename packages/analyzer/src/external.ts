@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { readFileSync as fsReadFileSync } from 'node:fs';
-import { access, mkdir, readFile, symlink } from 'node:fs/promises';
-import { dirname, join, resolve, sep } from 'node:path';
+import { access, mkdir, readFile, realpath, symlink } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import type { Snapshot } from '@difftrail/git';
 import {
@@ -256,15 +256,13 @@ async function preparePnpmEvidence(
     ) as unknown,
     'node_modules/.modules.yaml',
   );
-  const virtualStore =
+  const virtualStoreDir =
     typeof installedModules.virtualStoreDir === 'string'
       ? installedModules.virtualStoreDir
       : '.pnpm';
-  const installedLockPath = join(
+  const installedLockPath = await pnpmInstalledLockPath(
     snapshot.repositoryRoot,
-    'node_modules',
-    virtualStore,
-    'lock.yaml',
+    virtualStoreDir,
   );
   const installed = parseYaml(
     await readFile(installedLockPath, 'utf8'),
@@ -289,6 +287,28 @@ async function preparePnpmEvidence(
       addPnpmImporterEvidence(snapshot, state, manifestPath, names, evidence),
     );
   return evidence;
+}
+
+async function pnpmInstalledLockPath(
+  repositoryRoot: string,
+  virtualStoreDir: string,
+): Promise<string> {
+  const nodeModules = resolve(repositoryRoot, 'node_modules');
+  const virtualStore = isAbsolute(virtualStoreDir)
+    ? resolve(virtualStoreDir)
+    : resolve(nodeModules, virtualStoreDir);
+  if (!isAbsolute(virtualStoreDir)) assertWithin(nodeModules, virtualStore);
+
+  const realNodeModules = await realpath(nodeModules);
+  const realVirtualStore = await realpath(virtualStore);
+  assertWithin(realNodeModules, realVirtualStore);
+  return join(realVirtualStore, 'lock.yaml');
+}
+
+function assertWithin(root: string, candidate: string): void {
+  const path = relative(root, candidate);
+  if (path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path))
+    throw new Error('pnpm virtualStoreDir must resolve within node_modules');
 }
 
 async function addPnpmImporterEvidence(

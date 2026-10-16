@@ -108,6 +108,47 @@ test.each([
 
 // Windows filesystems cannot represent a literal backslash inside a filename.
 test.skipIf(process.platform === 'win32')(
+  'built CLI parses and explains a standalone literal-backslash TypeScript source',
+  async () => {
+    const repo = await repository({
+      'deps/leaf.ts': 'export const leaf = 1;\n',
+      'odd/back\\slash.ts':
+        "import {leaf} from '../deps/leaf'; export const value = leaf;\n",
+    });
+    try {
+      const base = repo.git('rev-parse', 'HEAD');
+      await writeFile(
+        join(repo.root, 'deps/leaf.ts'),
+        'export const leaf = 2;\n',
+      );
+      repo.git('add', '--all');
+      repo.git('commit', '--quiet', '-m', 'change imported dependency');
+      const head = repo.git('rev-parse', 'HEAD');
+      const result = cli(
+        repo.root,
+        '--base',
+        base,
+        '--head',
+        head,
+        '--json',
+        '--explain',
+      );
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+      const output = JSON.parse(result.stdout);
+      expect(output.files).toEqual(['deps/leaf.ts', 'odd/back\\slash.ts']);
+      expect(
+        output.explanations.find(
+          (item: { file: string }) => item.file === 'odd/back\\slash.ts',
+        ).chain,
+      ).toEqual(['deps/leaf.ts', 'odd/back\\slash.ts']);
+    } finally {
+      await repo.cleanup();
+    }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
   'built CLI preserves literal backslashes in source identity and dependency closure',
   async () => {
     const repo = await repository({
