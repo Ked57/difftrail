@@ -10,7 +10,9 @@ and LF. It verifies that `realpath` retains the requested suffix, invokes the ex
 from the root and a subdirectory with both latest commit and explicit endpoint selection,
 and checks literal endpoint IDs, exact returned paths, empty removals, and the canonical
 root. A fixture is reported as skipped with the filesystem error if that platform cannot
-create its path, or with the canonical path if the platform normalizes the suffix.
+create its path, with the canonical path if the platform normalizes the suffix, or with
+the Git spawn error if that platform cannot run `git` with the fixture directory as its
+working directory. That last skip is not taken on Linux, which still runs the assertion.
 
 ## Evidence
 
@@ -26,3 +28,8 @@ create its path, or with the canonical path if the platform normalizes the suffi
   npm/pnpm tarball installs, and knip.
 - **Manual QA:** parent-run installed CLI QA is separate and pending. This worktree run
   does not claim installed-package or non-Linux filesystem verification.
+- **Windows cwd:** GitHub Actions `quality (windows-latest)` failed this test with
+  `spawnSync git ENOENT` at `git init` when the fixture directory name ended in a space.
+  Windows created the directory, then could not use it as `git`'s working directory, so
+  the CLI never ran. The test now skips that case and states the spawn error. This Linux
+  worktree cannot reproduce that failure; the next CI run is the Windows proof.

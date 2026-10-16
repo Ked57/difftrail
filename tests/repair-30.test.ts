@@ -13,6 +13,11 @@ import { test, expect } from 'vitest';
 
 const executable = resolve('packages/cli/dist/cli.js');
 
+function gitWorkingDirectoryError(cwd: string): string | undefined {
+  return spawnSync('git', ['--version'], { cwd, encoding: 'utf8' }).error
+    ?.message;
+}
+
 for (const suffix of [' ', '\t', '\r', '\n']) {
   test(`built CLI preserves a repository root ending in ${JSON.stringify(suffix)}`, async ({
     skip,
@@ -31,6 +36,11 @@ for (const suffix of [' ', '\t', '\r', '\n']) {
       if (!canonicalRoot.endsWith(suffix))
         skip(
           `Filesystem normalized the requested ${JSON.stringify(suffix)} suffix; canonical root is ${JSON.stringify(canonicalRoot)}`,
+        );
+      const gitCwdError = gitWorkingDirectoryError(root);
+      if (gitCwdError !== undefined && process.platform !== 'linux')
+        skip(
+          `Platform cannot run git with a working directory ending in ${JSON.stringify(suffix)}: ${gitCwdError}`,
         );
 
       const git = (...args: string[]) =>
