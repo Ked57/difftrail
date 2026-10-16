@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { shallowRef, type Component } from 'vue';
 import GreetingCard from '../components/GreetingCard.vue';
 import MetricCard from '../components/MetricCard.vue';
 import { dashboardSummary } from '@/utils/dashboard-summary.js';
 
-const detail = ref('');
+const detail = shallowRef<Component>();
 
 async function loadReportDetails(): Promise<void> {
   const report = await import('@/components/ReportDetails.vue');
-  detail.value = report.default.__name ?? 'Weekly report details are ready.';
+  detail.value = report.default;
 }
 </script>
 
@@ -54,7 +54,9 @@ async function loadReportDetails(): Promise<void> {
     <button type="button" @click="loadReportDetails">
       Load report details
     </button>
-    <p v-if="detail" class="report-note" aria-live="polite">{{ detail }}</p>
+    <div v-if="detail" class="report-note" aria-live="polite">
+      <component :is="detail" />
+    </div>
   </section>
 </template>
 
