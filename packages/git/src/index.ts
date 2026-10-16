@@ -322,9 +322,10 @@ export async function withComparison<T>(
   run: (comparison: Comparison) => Promise<T>,
   options: ComparisonOptions = {},
 ): Promise<T> {
-  const root = (await git(cwd, ['rev-parse', '--show-toplevel']))
+  const gitRoot = (await git(cwd, ['rev-parse', '--show-toplevel']))
     .toString()
     .trimEnd();
+  const root = await realpath(gitRoot);
   const { base, head } = await selectEndpoints(root, options);
   const temporaryPath = await mkdtemp(join(tmpdir(), 'difftrail-snapshots-'));
   try {

@@ -1,7 +1,6 @@
 import { withComparison, type ComparisonOptions } from '@difftrail/git';
 import { extractGraph } from '@difftrail/analyzer';
 import { selectExplanations, selectImpact } from '@difftrail/core';
-import { sep } from 'node:path';
 
 class UsageError extends Error {}
 function recordFlag(flags: Set<string>, flag: string): void {
@@ -40,9 +39,6 @@ function globExpression(pattern: string): RegExp {
 }
 function matchesFilters(path: string, filters: readonly RegExp[]): boolean {
   return filters.length === 0 || filters.some((filter) => filter.test(path));
-}
-function outputPath(path: string): string {
-  return sep === '\\' ? path.replaceAll('\\', '/') : path;
 }
 function collectOptions(args: readonly string[]): {
   readonly flags: Set<string>;
@@ -125,12 +121,12 @@ async function main(args: readonly string[]): Promise<string> {
         headGraph.edges,
         comparison.headSnapshot.paths,
       );
-      const files = selected.files
-        .map(outputPath)
-        .filter((path) => matchesFilters(path, parsed.filters));
-      const removed = selected.removed
-        .map(outputPath)
-        .filter((path) => matchesFilters(path, parsed.filters));
+      const files = selected.files.filter((path) =>
+        matchesFilters(path, parsed.filters),
+      );
+      const removed = selected.removed.filter((path) =>
+        matchesFilters(path, parsed.filters),
+      );
       if (parsed.json)
         return (
           JSON.stringify({
@@ -154,8 +150,8 @@ async function main(args: readonly string[]): Promise<string> {
                     [...files, ...removed],
                   ).map((explanation) => ({
                     ...explanation,
-                    file: outputPath(explanation.file),
-                    chain: explanation.chain.map(outputPath),
+                    file: explanation.file,
+                    chain: explanation.chain,
                   })),
                 }
               : {}),
