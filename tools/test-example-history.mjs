@@ -84,7 +84,10 @@ function expectResult(cwd, files, removed = [], args = ['--json']) {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, '');
   const output = JSON.parse(result.stdout);
-  assert.equal(output.root, runGit(cwd, ['rev-parse', '--show-toplevel']));
+  assert.equal(
+    realpathSync(output.root),
+    realpathSync(runGit(cwd, ['rev-parse', '--show-toplevel'])),
+  );
   assert.deepEqual(output.files, files);
   assert.deepEqual(output.removed, removed);
 }
