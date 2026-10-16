@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import {
+  ElementTypes,
   NodeTypes,
   baseParse as parseTemplate,
   type ElementNode,
@@ -218,7 +219,9 @@ export function templateReferences(source: string): SourceRelationship[] {
 }
 
 export function templateComponentNames(source: string): string[] {
-  return templateElements(source).map((node) => node.tag);
+  return templateElements(source)
+    .filter((node) => node.tagType !== ElementTypes.SLOT)
+    .map((node) => node.tag);
 }
 
 function templateElements(source: string): ElementNode[] {
