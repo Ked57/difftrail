@@ -43,7 +43,7 @@ remains draft.
   Knip components passed individually. The original aggregate
   `pnpm verify:full` exit status was not captured, so it is not claimed as an
   aggregate pass. The final release-pin matrix passed macOS/Linux and mutation;
-  its four Windows cells failed and are under diagnosis.
+  its four Windows cells failed before the test-helper repair described below.
 - The second matrix exposed Windows-only virtual-path and diagnostic separator
   failures. `path.posix` now handles the synthetic snapshot root, while
   configured path separators are normalized using the Windows host separator

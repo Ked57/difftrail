@@ -38,8 +38,10 @@ prove publishing access. No package was published.
   passed all eight macOS and Linux OS/runtime cells and the mutation job. All
   four Windows OS/runtime cells failed in the package-test helper: it split a
   spaced Git commit argument when preparing an isolated fixture. The runtime,
-  unit, integration, and example-history jobs passed in those Windows cells.
-  The test-only helper repair is included at `8786aa6`; its local packed-package
+  unit, CLI integration, and example-history jobs passed in those Windows
+  cells. The integration suite ran 49 tests on macOS and Linux; Windows ran 45
+  and skipped four tests that require filenames unavailable on Windows. The
+  test-only helper repair is included at `8786aa6`; its local packed-package
   check passed with exit 0. This historical matrix result is not final
   integration-head platform evidence.
 - The separate domain mutation job passed its 80% threshold with a score of
