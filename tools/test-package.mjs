@@ -17,7 +17,11 @@ function run(command, args, cwd) {
   const result = spawnSync(command, args, {
     cwd,
     encoding: 'utf8',
-    shell: process.platform === 'win32' && command !== process.execPath,
+    shell:
+      process.platform === 'win32' &&
+      (command === 'pnpm' ||
+        command === 'npm' ||
+        command.toLowerCase().endsWith('.cmd')),
   });
   if (result.status !== 0)
     throw new Error(
