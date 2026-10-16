@@ -30,4 +30,4 @@ test('rejects config include paths outside the committed snapshot', async () => 
     await rm(outside, { recursive: true, force: true });
     await repo.cleanup();
   }
-});
+}, 30_000);

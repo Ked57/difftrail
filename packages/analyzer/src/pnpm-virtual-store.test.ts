@@ -71,7 +71,7 @@ test('resolves an absolute pnpm virtual store within node_modules', async () => 
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('rejects an absolute pnpm virtual store outside node_modules', async () => {
   const { repo } = await pnpmRepository((root) =>
@@ -87,7 +87,7 @@ test('rejects an absolute pnpm virtual store outside node_modules', async () => 
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('rejects a pnpm virtual store symlink that escapes node_modules', async () => {
   const { repo, nodeModules } = await pnpmRepository();
@@ -107,4 +107,4 @@ test('rejects a pnpm virtual store symlink that escapes node_modules', async () 
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);

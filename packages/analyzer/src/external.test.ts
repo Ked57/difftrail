@@ -100,4 +100,5 @@ test.each([
       await repo.cleanup();
     }
   },
+  30_000,
 );

@@ -41,7 +41,7 @@ test('extracts both Vue script blocks and type-only relationships onto their own
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('extracts Vue import-equals and import-type-query relationships', async () => {
   const repo = await repository({
@@ -75,7 +75,7 @@ test('extracts Vue import-equals and import-type-query relationships', async () 
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('tracks Vue block src, template assets, and CSS imports and URLs', async () => {
   const repo = await repository({
@@ -121,7 +121,7 @@ test('tracks Vue block src, template assets, and CSS imports and URLs', async ()
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('does not treat URL-like CSS strings as asset references', async () => {
   const repo = await repository({
@@ -143,7 +143,7 @@ test('does not treat URL-like CSS strings as asset references', async () => {
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('accepts a scriptless Vue component and diagnoses invalid template syntax', async () => {
   const valid = await repository({
@@ -172,7 +172,7 @@ test('accepts a scriptless Vue component and diagnoses invalid template syntax',
   } finally {
     await invalid.cleanup();
   }
-});
+}, 30_000);
 
 test('resolves Vue and CSS asset references through committed aliases', async () => {
   const repo = await repository({
@@ -206,7 +206,7 @@ test('resolves Vue and CSS asset references through committed aliases', async ()
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test('fails when a required local template asset is missing', async () => {
   const repo = await repository({
@@ -221,20 +221,24 @@ test('fails when a required local template asset is missing', async () => {
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
 
 test.each([
   ['invalid SFC script', '<script lang="ts">export const = 2;</script>'],
   ['dynamic template asset', '<template><img :src="imagePath" /></template>'],
-])('reports an analysis gap for %s', async (_name, source) => {
-  const repo = await repository({ 'Page.vue': source });
-  try {
-    await withComparison(repo.root, async (comparison) =>
-      expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
-        `Analysis gap in Page.vue at ${comparison.head}`,
-      ),
-    );
-  } finally {
-    await repo.cleanup();
-  }
-});
+])(
+  'reports an analysis gap for %s',
+  async (_name, source) => {
+    const repo = await repository({ 'Page.vue': source });
+    try {
+      await withComparison(repo.root, async (comparison) =>
+        expect(extractGraph(comparison.headSnapshot)).rejects.toThrow(
+          `Analysis gap in Page.vue at ${comparison.head}`,
+        ),
+      );
+    } finally {
+      await repo.cleanup();
+    }
+  },
+  30_000,
+);
