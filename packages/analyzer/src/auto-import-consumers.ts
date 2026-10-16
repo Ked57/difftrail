@@ -5,6 +5,7 @@ import type { Snapshot } from '@difftrail/git';
 import { isCoreComponent, parserOptions } from '@vue/compiler-dom';
 import { parse as parseSfc } from '@vue/compiler-sfc';
 import ts from 'typescript';
+import { localComponentNames } from './auto-import-vue-bindings.js';
 import { analysisGap as gap } from './errors.js';
 import { templateComponentNames } from './explicit.js';
 import type { AutoImportMapping, MappingCollection } from './auto-imports.js';
@@ -48,7 +49,9 @@ async function componentEdges(
         'utf8',
       );
     }
-    const localNames = localComponentNames(parsed.descriptor);
+    const localNames = new Set(
+      localComponentNames(parsed.descriptor).map(normalizeName),
+    );
     for (const tag of templateComponentNames(content))
       edges.push(
         ...componentTagEdges(snapshot, path, tag, localNames, collection),
@@ -98,105 +101,6 @@ function isNativeOrBuiltInTag(tag: string): boolean {
     isCoreComponent(tag) ||
     tag.toLowerCase() === 'component',
   );
-}
-
-function localComponentNames(
-  descriptor: ReturnType<typeof parseSfc>['descriptor'],
-): Set<string> {
-  const names = new Set<string>();
-  if (descriptor.scriptSetup && !descriptor.scriptSetup.src)
-    for (const name of setupBindings(descriptor.scriptSetup.content))
-      names.add(normalizeName(name));
-  if (descriptor.script && !descriptor.script.src)
-    for (const name of registeredComponentNames(descriptor.script.content))
-      names.add(normalizeName(name));
-  return names;
-}
-
-function setupBindings(content: string): string[] {
-  const file = ts.createSourceFile(
-    'component.ts',
-    content,
-    ts.ScriptTarget.Latest,
-    true,
-  );
-  return file.statements.flatMap((statement) => {
-    if (ts.isImportDeclaration(statement))
-      return importBindings(statement.importClause);
-    if (ts.isVariableStatement(statement))
-      return statement.declarationList.declarations.flatMap((declaration) =>
-        bindingNames(declaration.name),
-      );
-    if (
-      (ts.isFunctionDeclaration(statement) ||
-        ts.isClassDeclaration(statement) ||
-        ts.isEnumDeclaration(statement)) &&
-      statement.name
-    )
-      return [statement.name.text];
-    return [];
-  });
-}
-
-function importBindings(clause: ts.ImportClause | undefined): string[] {
-  if (!clause || clause.isTypeOnly) return [];
-  const names = clause.name ? [clause.name.text] : [];
-  if (clause.namedBindings && ts.isNamedImports(clause.namedBindings))
-    names.push(
-      ...clause.namedBindings.elements
-        .filter((item) => !item.isTypeOnly)
-        .map((item) => item.name.text),
-    );
-  if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings))
-    names.push(clause.namedBindings.name.text);
-  return names;
-}
-
-function bindingNames(name: ts.BindingName): string[] {
-  if (ts.isIdentifier(name)) return [name.text];
-  return name.elements.flatMap((element) =>
-    ts.isOmittedExpression(element) ? [] : bindingNames(element.name),
-  );
-}
-
-function registeredComponentNames(content: string): string[] {
-  const file = ts.createSourceFile(
-    'component.js',
-    content,
-    ts.ScriptTarget.Latest,
-    true,
-  );
-  const exported = file.statements.find(
-    (statement): statement is ts.ExportAssignment =>
-      ts.isExportAssignment(statement) && !statement.isExportEquals,
-  );
-  if (!exported) return [];
-  const root = exported.expression;
-  const options = ts.isCallExpression(root) ? root.arguments[0] : root;
-  if (!options || !ts.isObjectLiteralExpression(options)) return [];
-  const components = options.properties.find(
-    (property) =>
-      ts.isPropertyAssignment(property) &&
-      propertyName(property.name) === 'components',
-  );
-  if (!components || !ts.isPropertyAssignment(components)) return [];
-  if (!ts.isObjectLiteralExpression(components.initializer)) return [];
-  return components.initializer.properties.flatMap((property) => {
-    if (ts.isShorthandPropertyAssignment(property)) return [property.name.text];
-    if (ts.isPropertyAssignment(property)) {
-      const name = propertyName(property.name);
-      return name ? [name] : [];
-    }
-    return [];
-  });
-}
-
-function propertyName(name: ts.PropertyName): string | undefined {
-  return ts.isIdentifier(name) ||
-    ts.isStringLiteral(name) ||
-    ts.isNumericLiteral(name)
-    ? name.text
-    : undefined;
 }
 
 function mappedEdges(

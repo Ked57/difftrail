@@ -28,8 +28,9 @@ test('gives setup bindings and registered Options API components local precedenc
     ].join('\n'),
     'pages/options.vue': [
       '<script>',
+      "import { defineComponent as defineVueComponent } from 'vue';",
       "import AliasButton from '../AliasButton.vue';",
-      'export default { components: { AutoButton: AliasButton } };',
+      'export default defineVueComponent({ components: { AutoButton: AliasButton } });',
       '</script>',
       '<template><AutoButton /></template>',
     ].join('\n'),
@@ -39,6 +40,15 @@ test('gives setup bindings and registered Options API components local precedenc
       '</script>',
       '<template><AutoButton /></template>',
     ].join('\n'),
+    'pages/wrapped.vue': [
+      '<script>',
+      "import { wrap } from '../wrappers';",
+      "import LocalButton from '../AliasButton.vue';",
+      'export default wrap({ components: { AutoButton: LocalButton } });',
+      '</script>',
+      '<template><AutoButton /></template>',
+    ].join('\n'),
+    'wrappers.ts': 'export const wrap = (options: unknown) => options;',
   });
   try {
     await withComparison(repo.root, async (comparison) => {
@@ -46,6 +56,13 @@ test('gives setup bindings and registered Options API components local precedenc
       expect(edges).toContainEqual(
         expect.objectContaining({
           importer: 'pages/unregistered.vue',
+          dependency: 'GlobalButton.vue',
+          kind: 'auto-import',
+        }),
+      );
+      expect(edges).toContainEqual(
+        expect.objectContaining({
+          importer: 'pages/wrapped.vue',
           dependency: 'GlobalButton.vue',
           kind: 'auto-import',
         }),
