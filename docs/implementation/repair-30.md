@@ -19,7 +19,8 @@ create its path, or with the canonical path if the platform normalizes the suffi
   Git's path had been shortened before canonicalization.
 - **After:** the same command passed all four suffix cases on Linux, including root and
   subdirectory invocations and latest and explicit endpoint comparisons.
-- **Implementation pin:** recorded after commit.
+- **Implementation pin:** `ebe3685bf42aa409ed8119211301ea7eebe6e602` (the code and built CLI
+  verified by the full gate; the later commit only adds this pin to the record).
 - **Full verification:** `pnpm verify:fast` and `pnpm verify:full` passed. The full gate
   includes build, 53 built-CLI integration tests, nine example Git histories, isolated
   npm/pnpm tarball installs, and knip.
