@@ -181,7 +181,7 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
       sources,
       requiredSpecifiers,
     );
-    const autoImports = await autoImportEdges(snapshot);
+    const autoImports = await autoImportEdges(snapshot, localEdges);
     return {
       revision: snapshot.revision,
       edges: [...localEdges, ...autoImports, ...symlinkEdges(snapshot)],
@@ -198,7 +198,7 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
     requiredSpecifiers,
     resolution.configRootsBySource,
   );
-  const autoImports = await autoImportEdges(snapshot);
+  const autoImports = await autoImportEdges(snapshot, localEdges);
   const extracted = await extractModules(
     snapshot,
     sources,

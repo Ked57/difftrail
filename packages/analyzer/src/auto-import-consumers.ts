@@ -5,6 +5,7 @@ import type { Snapshot } from '@difftrail/git';
 import { isCoreComponent, parserOptions } from '@vue/compiler-dom';
 import { parse as parseSfc } from '@vue/compiler-sfc';
 import ts from 'typescript';
+import { localComponentNames } from './auto-import-vue-bindings.js';
 import { analysisGap as gap } from './errors.js';
 import { templateComponentNames } from './explicit.js';
 import type { AutoImportMapping, MappingCollection } from './auto-imports.js';
@@ -13,8 +14,9 @@ import { resolveMappedDependencies } from './auto-import-resolution.js';
 export async function consumerEdges(
   snapshot: Snapshot,
   collection: MappingCollection,
+  templateEdges: readonly DependencyEdge[],
 ): Promise<DependencyEdge[]> {
-  const edges = await componentEdges(snapshot, collection);
+  const edges = await componentEdges(snapshot, collection, templateEdges);
   edges.push(...(await scriptEdges(snapshot, collection)));
   return resolveMappedDependencies(snapshot, deduplicate(edges));
 }
@@ -22,6 +24,7 @@ export async function consumerEdges(
 async function componentEdges(
   snapshot: Snapshot,
   collection: MappingCollection,
+  templateEdges: readonly DependencyEdge[],
 ): Promise<DependencyEdge[]> {
   const edges: DependencyEdge[] = [];
   for (const path of snapshot.paths.filter((item) => item.endsWith('.vue'))) {
@@ -29,9 +32,27 @@ async function componentEdges(
     const parsed = parseSfc(source, { filename: path });
     if (parsed.errors.length) continue;
     const template = parsed.descriptor.template;
-    if (!template || template.src) continue;
-    const localNames = localScriptNames(parsed.descriptor);
-    for (const tag of templateComponentNames(template.content))
+    if (!template) continue;
+    let content = template.content;
+    if (template.src) {
+      if (template.lang && template.lang !== 'html') continue;
+      const externalTemplate = templateEdges.find(
+        (edge) => edge.importer === path && edge.kind === 'template-src',
+      );
+      if (
+        !externalTemplate ||
+        !snapshot.paths.includes(externalTemplate.dependency)
+      )
+        continue;
+      content = await readFile(
+        resolve(snapshot.directory, externalTemplate.dependency),
+        'utf8',
+      );
+    }
+    const localNames = new Set(
+      localComponentNames(parsed.descriptor).map(normalizeName),
+    );
+    for (const tag of templateComponentNames(content))
       edges.push(
         ...componentTagEdges(snapshot, path, tag, localNames, collection),
       );
@@ -80,37 +101,6 @@ function isNativeOrBuiltInTag(tag: string): boolean {
     isCoreComponent(tag) ||
     tag.toLowerCase() === 'component',
   );
-}
-
-function localScriptNames(
-  descriptor: ReturnType<typeof parseSfc>['descriptor'],
-): Set<string> {
-  const names = new Set<string>();
-  for (const block of [descriptor.script, descriptor.scriptSetup]) {
-    if (!block || block.src) continue;
-    for (const name of importedNames(block.content)) names.add(name);
-  }
-  return names;
-}
-
-function importedNames(content: string): string[] {
-  const file = ts.createSourceFile(
-    'component.ts',
-    content,
-    ts.ScriptTarget.Latest,
-    true,
-  );
-  return file.statements.flatMap((statement) => {
-    if (!ts.isImportDeclaration(statement) || !statement.importClause)
-      return [];
-    const clause = statement.importClause;
-    const names = clause.name ? [clause.name.text] : [];
-    if (clause.namedBindings && ts.isNamedImports(clause.namedBindings))
-      names.push(
-        ...clause.namedBindings.elements.map((item) => item.name.text),
-      );
-    return names.map(normalizeName);
-  });
 }
 
 function mappedEdges(
