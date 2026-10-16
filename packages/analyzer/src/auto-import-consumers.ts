@@ -328,12 +328,13 @@ function virtualScript(
   const jsx = block.lang === 'jsx' || block.lang === 'tsx';
   const extension = typed ? (jsx ? 'tsx' : 'ts') : jsx ? 'jsx' : 'js';
   const virtual = `${importer}.__difftrail_${index}.${extension}`;
+  const moduleContent = `${block.content}\nexport {};`;
   return {
     importer,
     path: virtual,
     source: ts.createSourceFile(
       resolve(snapshot.directory, virtual),
-      block.content,
+      moduleContent,
       ts.ScriptTarget.Latest,
       true,
       typed
@@ -382,7 +383,9 @@ function autoImportReferenceEdges(
   byDeclaration: ReadonlyMap<string, AutoImportMapping>,
   collection: MappingCollection,
 ): DependencyEdge[] {
-  const symbol = checker.getSymbolAtLocation(node);
+  const symbol = ts.isShorthandPropertyAssignment(node.parent)
+    ? checker.getShorthandAssignmentValueSymbol(node.parent)
+    : checker.getSymbolAtLocation(node);
   const declaration = symbol?.declarations?.find(ts.isVariableDeclaration);
   if (declaration) {
     const metadata = declaration.getSourceFile().fileName;

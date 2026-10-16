@@ -317,20 +317,33 @@ try {
       'https://registry.npmjs.org/unplugin-vue-components/-/unplugin-vue-components-1.0.0.tgz',
     integrity: 'sha512-fixture',
   };
+  const autoImportRecord = {
+    version: '1.0.0',
+    resolved:
+      'https://registry.npmjs.org/unplugin-auto-import/-/unplugin-auto-import-1.0.0.tgz',
+    integrity: 'sha512-fixture',
+  };
   const pluginLock = {
     lockfileVersion: 3,
     packages: {
       '': {
-        devDependencies: { 'unplugin-vue-components': '1.0.0' },
+        devDependencies: {
+          'unplugin-vue-components': '1.0.0',
+          'unplugin-auto-import': '1.0.0',
+        },
       },
       'node_modules/unplugin-vue-components': pluginRecord,
+      'node_modules/unplugin-auto-import': autoImportRecord,
     },
   };
   await writeFile(
     join(autoImportFixture, 'package.json'),
     JSON.stringify({
       private: true,
-      devDependencies: { 'unplugin-vue-components': '1.0.0' },
+      devDependencies: {
+        'unplugin-vue-components': '1.0.0',
+        'unplugin-auto-import': '1.0.0',
+      },
     }),
   );
   await writeFile(
@@ -352,6 +365,23 @@ try {
   );
   await writeFile(join(pluginRoot, 'index.js'), 'module.exports = () => ({});');
   await writeFile(join(pluginRoot, 'vite.js'), 'module.exports = () => ({});');
+  const autoImportRoot = join(
+    autoImportFixture,
+    'node_modules/unplugin-auto-import',
+  );
+  await mkdir(autoImportRoot, { recursive: true });
+  await writeFile(
+    join(autoImportRoot, 'package.json'),
+    JSON.stringify({
+      name: 'unplugin-auto-import',
+      version: '1.0.0',
+      main: 'index.js',
+    }),
+  );
+  await writeFile(
+    join(autoImportRoot, 'index.js'),
+    'module.exports = () => ({});',
+  );
   await writeFile(
     join(autoImportFixture, 'node_modules/.package-lock.json'),
     JSON.stringify(pluginLock),
@@ -379,7 +409,8 @@ try {
     {
       'vite.config.mjs': [
         "import Components from 'unplugin-vue-components/vite';",
-        "export default Components({ dirs: ['./src/components/auto-primary'], dts: 'generated/components.d.ts' });",
+        "import AutoImport from 'unplugin-auto-import';",
+        "export default [Components({ dirs: ['./src/components/auto-primary'], dts: 'generated/components.d.ts' }), AutoImport({ dts: false, imports: [{ './src/composables/usePrice': ['usePrice'] }] })];",
       ].join('\n'),
       'generated/components.d.ts': declaration('../src/AutoButton.vue'),
       'src/AutoButton.vue': '<template><button><slot /></button></template>',
@@ -394,6 +425,9 @@ try {
         '<template><Checkout /></template>',
       ].join('\n'),
       'src/main.ts': "import App from './App.vue';\nvoid App;",
+      'src/composables/usePrice.ts': 'export default () => 1;',
+      'pages/shorthand.ts': 'export const prices = { usePrice };',
+      'pages/direct.ts': 'export const price = usePrice();',
     },
     'baseline auto-import mapping',
   );
@@ -422,7 +456,8 @@ try {
     {
       'vite.config.mjs': [
         "import Components from 'unplugin-vue-components/vite';",
-        "export default Components({ dirs: ['./src/components/auto-alternate'], dts: 'generated/components.d.ts' });",
+        "import AutoImport from 'unplugin-auto-import';",
+        "export default [Components({ dirs: ['./src/components/auto-alternate'], dts: 'generated/components.d.ts' }), AutoImport({ dts: false, imports: [{ './src/composables/usePrice': ['usePrice'] }] })];",
       ].join('\n'),
     },
     'change only the component plugin configuration',
@@ -436,11 +471,27 @@ try {
   );
   assert.deepEqual(configOnlyResult.files, [
     'pages/checkout.vue',
+    'pages/direct.ts',
+    'pages/shorthand.ts',
     'src/App.vue',
     'src/main.ts',
     'vite.config.mjs',
   ]);
   assert.ok(!configOnlyResult.files.includes('pages/settings.vue'));
+  const shorthandAutoImport = await commitAutoImport(
+    { 'src/composables/usePrice.ts': 'export default () => 2;' },
+    'change auto-import provider used as shorthand value',
+  );
+  assert.deepEqual(
+    run(
+      bin,
+      ['--base', configOnlyAutoImport, '--head', shorthandAutoImport],
+      autoImportFixture,
+    )
+      .trim()
+      .split('\n'),
+    ['pages/direct.ts', 'pages/shorthand.ts', 'src/composables/usePrice.ts'],
+  );
   const headGap = await commitAutoImport(
     { 'pages/checkout.vue': '<template><remote-widget /></template>' },
     'introduce a runtime-only auto-import gap',
