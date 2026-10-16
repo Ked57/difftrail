@@ -54,5 +54,7 @@ The complete reports are retained outside the repository:
 
 ## CI
 
-Fresh Ubuntu CI and PR workflow results are pending the integration branch push.
-Skipped mutation jobs remain skipped and are not passing evidence.
+Fresh Ubuntu push run [38871379923](https://github.com/Ked57/difftrail/actions/runs/38871379923)
+and PR run [38871386291](https://github.com/Ked57/difftrail/actions/runs/38871386291)
+both passed `pnpm verify:full` on integration head `fd1d3b0`. The optional
+mutation job was skipped in both runs and is not claimed as passing evidence.
