@@ -128,7 +128,9 @@ function mappedEdges(
 ): DependencyEdge[] {
   const name = normalizeName(tag);
   const found = (suppliedMappings ?? collection.mappings).filter(
-    (mapping) => normalizeName(mapping.name) === name,
+    (mapping) =>
+      normalizeName(mapping.name) === name &&
+      mappingApplies(importer, mapping, collection),
   );
   const targets = new Set(
     found.map((mapping) => resolveMapping(snapshot, importer, mapping)),
@@ -141,22 +143,20 @@ function mappedEdges(
     );
   const target = targets.values().next().value as string | undefined;
   if (found.length === 0) return [];
-  const provenance = [
-    ...found.map((mapping) => ({
+  const provenance = found.flatMap((mapping) => [
+    {
       importer,
       dependency: mapping.metadata,
       specifier: mapping.name,
       kind: mapping.metadataKind,
+    },
+    ...applicableConfigs(mapping, importer, collection).map((config) => ({
+      importer,
+      dependency: config,
+      specifier: config,
+      kind: 'configuration',
     })),
-    ...(collection.configsByMetadata.get(found[0]?.metadata ?? '') ?? []).map(
-      (config) => ({
-        importer,
-        dependency: config,
-        specifier: config,
-        kind: 'configuration',
-      }),
-    ),
-  ];
+  ]);
   if (!target) return provenance;
   return [
     {
@@ -167,6 +167,27 @@ function mappedEdges(
     },
     ...provenance,
   ];
+}
+
+function mappingApplies(
+  importer: string,
+  mapping: AutoImportMapping,
+  collection: MappingCollection,
+): boolean {
+  return mapping.metadataKind === 'configuration'
+    ? configApplies(importer, [mapping.metadata])
+    : applicableConfigs(mapping, importer, collection).length > 0;
+}
+
+function applicableConfigs(
+  mapping: AutoImportMapping | undefined,
+  importer: string,
+  collection: MappingCollection,
+): string[] {
+  if (!mapping) return [];
+  return (collection.configsByMetadata.get(mapping.metadata) ?? []).filter(
+    (config) => configApplies(importer, [config]),
+  );
 }
 
 function configApplies(importer: string, configs: readonly string[]): boolean {
@@ -386,17 +407,23 @@ function autoImportReferenceEdges(
   const declaration = symbol?.declarations?.find(ts.isVariableDeclaration);
   if (declaration) {
     const metadata = declaration.getSourceFile().fileName;
-    const mapping = byDeclaration.get(
+    const ownsMapping = byDeclaration.get(
       `${compilerFileName(metadata)}\0${node.text}`,
     );
-    return mapping
-      ? mappedEdges(snapshot, importer, mapping.name, collection, [mapping])
-      : [];
+    if (!ownsMapping) return [];
+    const applicable = collection.mappings.filter(
+      (mapping) =>
+        mapping.name === node.text &&
+        mappingApplies(importer, mapping, collection),
+    );
+    return mappedEdges(snapshot, importer, node.text, collection, applicable);
   }
   if (symbol) return [];
   const configured = collection.mappings.filter(
     (mapping) =>
-      mapping.metadataKind === 'configuration' && mapping.name === node.text,
+      mapping.metadataKind === 'configuration' &&
+      mapping.name === node.text &&
+      mappingApplies(importer, mapping, collection),
   );
   return configured.length
     ? mappedEdges(snapshot, importer, node.text, collection, configured)
