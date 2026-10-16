@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { readFileSync as fsReadFileSync } from 'node:fs';
 import { access, mkdir, readFile, symlink } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import type { Snapshot } from '@difftrail/git';
 import {
@@ -85,8 +85,10 @@ function readInstalledJson(path: string): Promise<unknown> {
     .then((contents) => JSON.parse(contents) as unknown)
     .catch((error: unknown) => {
       const cause = error instanceof Error ? error.message : String(error);
+      const displayPath =
+        process.platform === 'win32' ? path.split(sep).join('/') : path;
       throw new Error(
-        `required installed dependency evidence ${path} is unavailable: ${cause}`,
+        `required installed dependency evidence ${displayPath} is unavailable: ${cause}`,
       );
     });
 }
