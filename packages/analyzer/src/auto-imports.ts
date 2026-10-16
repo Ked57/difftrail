@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { posix, resolve, sep } from 'node:path';
+import type { DependencyEdge } from '@difftrail/core';
 import type { Snapshot } from '@difftrail/git';
 import ts from 'typescript';
 import { analysisGap as gap } from './errors.js';
@@ -24,9 +25,10 @@ export interface MappingCollection {
 
 export async function autoImportEdges(
   snapshot: Snapshot,
-): Promise<import('@difftrail/core').DependencyEdge[]> {
+  templateEdges: readonly DependencyEdge[] = [],
+): Promise<DependencyEdge[]> {
   const collection = await readMappings(snapshot);
-  return consumerEdges(snapshot, collection);
+  return consumerEdges(snapshot, collection, templateEdges);
 }
 
 async function readMappings(snapshot: Snapshot): Promise<MappingCollection> {

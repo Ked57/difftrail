@@ -13,8 +13,9 @@ import { resolveMappedDependencies } from './auto-import-resolution.js';
 export async function consumerEdges(
   snapshot: Snapshot,
   collection: MappingCollection,
+  templateEdges: readonly DependencyEdge[],
 ): Promise<DependencyEdge[]> {
-  const edges = await componentEdges(snapshot, collection);
+  const edges = await componentEdges(snapshot, collection, templateEdges);
   edges.push(...(await scriptEdges(snapshot, collection)));
   return resolveMappedDependencies(snapshot, deduplicate(edges));
 }
@@ -22,6 +23,7 @@ export async function consumerEdges(
 async function componentEdges(
   snapshot: Snapshot,
   collection: MappingCollection,
+  templateEdges: readonly DependencyEdge[],
 ): Promise<DependencyEdge[]> {
   const edges: DependencyEdge[] = [];
   for (const path of snapshot.paths.filter((item) => item.endsWith('.vue'))) {
@@ -29,9 +31,25 @@ async function componentEdges(
     const parsed = parseSfc(source, { filename: path });
     if (parsed.errors.length) continue;
     const template = parsed.descriptor.template;
-    if (!template || template.src) continue;
-    const localNames = localScriptNames(parsed.descriptor);
-    for (const tag of templateComponentNames(template.content))
+    if (!template) continue;
+    let content = template.content;
+    if (template.src) {
+      if (template.lang && template.lang !== 'html') continue;
+      const externalTemplate = templateEdges.find(
+        (edge) => edge.importer === path && edge.kind === 'template-src',
+      );
+      if (
+        !externalTemplate ||
+        !snapshot.paths.includes(externalTemplate.dependency)
+      )
+        continue;
+      content = await readFile(
+        resolve(snapshot.directory, externalTemplate.dependency),
+        'utf8',
+      );
+    }
+    const localNames = localComponentNames(parsed.descriptor);
+    for (const tag of templateComponentNames(content))
       edges.push(
         ...componentTagEdges(snapshot, path, tag, localNames, collection),
       );
@@ -82,18 +100,20 @@ function isNativeOrBuiltInTag(tag: string): boolean {
   );
 }
 
-function localScriptNames(
+function localComponentNames(
   descriptor: ReturnType<typeof parseSfc>['descriptor'],
 ): Set<string> {
   const names = new Set<string>();
-  for (const block of [descriptor.script, descriptor.scriptSetup]) {
-    if (!block || block.src) continue;
-    for (const name of importedNames(block.content)) names.add(name);
-  }
+  if (descriptor.scriptSetup && !descriptor.scriptSetup.src)
+    for (const name of setupBindings(descriptor.scriptSetup.content))
+      names.add(normalizeName(name));
+  if (descriptor.script && !descriptor.script.src)
+    for (const name of registeredComponentNames(descriptor.script.content))
+      names.add(normalizeName(name));
   return names;
 }
 
-function importedNames(content: string): string[] {
+function setupBindings(content: string): string[] {
   const file = ts.createSourceFile(
     'component.ts',
     content,
@@ -101,16 +121,82 @@ function importedNames(content: string): string[] {
     true,
   );
   return file.statements.flatMap((statement) => {
-    if (!ts.isImportDeclaration(statement) || !statement.importClause)
-      return [];
-    const clause = statement.importClause;
-    const names = clause.name ? [clause.name.text] : [];
-    if (clause.namedBindings && ts.isNamedImports(clause.namedBindings))
-      names.push(
-        ...clause.namedBindings.elements.map((item) => item.name.text),
+    if (ts.isImportDeclaration(statement))
+      return importBindings(statement.importClause);
+    if (ts.isVariableStatement(statement))
+      return statement.declarationList.declarations.flatMap((declaration) =>
+        bindingNames(declaration.name),
       );
-    return names.map(normalizeName);
+    if (
+      (ts.isFunctionDeclaration(statement) ||
+        ts.isClassDeclaration(statement) ||
+        ts.isEnumDeclaration(statement)) &&
+      statement.name
+    )
+      return [statement.name.text];
+    return [];
   });
+}
+
+function importBindings(clause: ts.ImportClause | undefined): string[] {
+  if (!clause || clause.isTypeOnly) return [];
+  const names = clause.name ? [clause.name.text] : [];
+  if (clause.namedBindings && ts.isNamedImports(clause.namedBindings))
+    names.push(
+      ...clause.namedBindings.elements
+        .filter((item) => !item.isTypeOnly)
+        .map((item) => item.name.text),
+    );
+  if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings))
+    names.push(clause.namedBindings.name.text);
+  return names;
+}
+
+function bindingNames(name: ts.BindingName): string[] {
+  if (ts.isIdentifier(name)) return [name.text];
+  return name.elements.flatMap((element) =>
+    ts.isOmittedExpression(element) ? [] : bindingNames(element.name),
+  );
+}
+
+function registeredComponentNames(content: string): string[] {
+  const file = ts.createSourceFile(
+    'component.js',
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const exported = file.statements.find(
+    (statement): statement is ts.ExportAssignment =>
+      ts.isExportAssignment(statement) && !statement.isExportEquals,
+  );
+  if (!exported) return [];
+  const root = exported.expression;
+  const options = ts.isCallExpression(root) ? root.arguments[0] : root;
+  if (!options || !ts.isObjectLiteralExpression(options)) return [];
+  const components = options.properties.find(
+    (property) =>
+      ts.isPropertyAssignment(property) &&
+      propertyName(property.name) === 'components',
+  );
+  if (!components || !ts.isPropertyAssignment(components)) return [];
+  if (!ts.isObjectLiteralExpression(components.initializer)) return [];
+  return components.initializer.properties.flatMap((property) => {
+    if (ts.isShorthandPropertyAssignment(property)) return [property.name.text];
+    if (ts.isPropertyAssignment(property)) {
+      const name = propertyName(property.name);
+      return name ? [name] : [];
+    }
+    return [];
+  });
+}
+
+function propertyName(name: ts.PropertyName): string | undefined {
+  return ts.isIdentifier(name) ||
+    ts.isStringLiteral(name) ||
+    ts.isNumericLiteral(name)
+    ? name.text
+    : undefined;
 }
 
 function mappedEdges(
