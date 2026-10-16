@@ -3,9 +3,10 @@
 Status: implementation merged into `codex/difftrail-cli` at
 `fd29b23ddadc629e1afb2683366321ba2206ba7a`, including reviewed release pin
 `07679254b837fdf127681a59cfb7561e64aecea4` and reviewed test-only package
-harness repair `8786aa6134cba57600aa72eb87f855e25052931d`. Final-head matrix
-evidence and acceptance remain pending; issue #20 remains open and PR #21
-remains draft.
+harness repair `8786aa6134cba57600aa72eb87f855e25052931d`. Final acceptance
+status is maintained in the [Ticket 20 release-validation
+comment](https://github.com/Ked57/difftrail/issues/20#issuecomment-6215990357)
+and the linked PR checks.
 
 ## Changes
 
@@ -32,17 +33,17 @@ remains draft.
   packed parser dependencies against conflicting consumer parsers.
 - Read-only `npm view difftrail name version --json` returned E404 on
   2026-10-16. This does not reserve the name.
-- Remote OS/runtime matrix at the first pin found that Windows checkout line
+- The initial remote OS/runtime matrix found that Windows checkout line
   endings made Prettier report every text file as unformatted before later
   gates ran. The follow-up `.gitattributes` repair sets LF for detected text
   files while preserving binary detection. A local checkout simulation with
-  `core.autocrlf=true` passes the unchanged Prettier gate; the full remote
-  matrix must be rerun after this repair.
+  `core.autocrlf=true` passes the unchanged Prettier gate; a later matrix
+  exposed a separate test-helper issue, recorded below.
 - The Ubuntu Node 22 mutation job passed on the first dispatch. On macOS Node
   `22.23.1`, the recorded unit, CLI integration, example-history, package, and
   Knip components passed individually. The original aggregate
   `pnpm verify:full` exit status was not captured, so it is not claimed as an
-  aggregate pass. The final release-pin matrix passed macOS/Linux and mutation;
+  aggregate pass. The historical release-pin matrix passed macOS/Linux and mutation;
   its four Windows cells failed before the test-helper repair described below.
 - The second matrix exposed Windows-only virtual-path and diagnostic separator
   failures. `path.posix` now handles the synthetic snapshot root, while
@@ -52,7 +53,8 @@ remains draft.
   reached and passed the runtime, unit, integration, and example-history jobs,
   then exposed a spaced-Git-argument issue in the package-test helper. The
   independently reviewed test-only repair is integrated at `8786aa6`, and its
-  local package check passed. Final-head matrix results remain pending.
+  local package check passed. The final integration-head status is maintained
+  in the Ticket 20 release-validation comment and linked PR checks.
 - Regression coverage exercises dangling/external opaque-link root, add, and
   delete seeds; safe source-link chains as importer and target; fail-closed
   dangling/external/cyclic source aliases with atomic CLI output; and gitlinks
@@ -61,6 +63,5 @@ remains draft.
 
 The integrated changes and measured evidence are recorded in
 [`Ticket 08 verification`](../verification/ticket-08.md). No runtime code changed
-after the reviewed release pin. The remaining acceptance gate is actual final
-integration-head CI across the configured OS/runtime matrix, followed by final
-readiness review. No npm package was published.
+after the reviewed release pin. Final CI status is tracked in the Ticket 20
+release-validation comment and linked PR checks. No npm package was published.

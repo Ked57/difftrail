@@ -4,9 +4,10 @@ The reviewed release implementation is integrated on `codex/difftrail-cli` at
 `fd29b23ddadc629e1afb2683366321ba2206ba7a`. This merge includes reviewed
 release pin `07679254b837fdf127681a59cfb7561e64aecea4` and the test-only
 Windows package harness repair at `8786aa6134cba57600aa72eb87f855e25052931d`.
-Runtime source is unchanged from the reviewed release pin. Ticket #20 remains
-open and draft PR #21 remains draft until final-head CI and acceptance are
-complete.
+Runtime source is unchanged from the reviewed release pin. Final acceptance
+status is maintained in the [Ticket 20 release-validation
+comment](https://github.com/Ked57/difftrail/issues/20#issuecomment-6215990357)
+and the linked PR checks.
 
 ## Release candidate
 
@@ -50,10 +51,11 @@ prove publishing access. No package was published.
 On integration head `fd29b23ddadc629e1afb2683366321ba2206ba7a`,
 `pnpm verify:fast` and `git diff --check` passed. The fast gate completed format,
 lint and difficulty audit, TypeScript/Vue checks, and 64 unit tests with 100%
-core coverage. The docs-only commit will be checked for formatting and
-whitespace before push. The required platform matrix runs the full gate on macOS, Linux,
+core coverage. The required platform matrix runs the full gate on macOS, Linux,
 and Windows at the minimum and current Node 22 and 24 releases (12 OS/runtime
 cells). Only completed final-head workflow results count as platform evidence.
+Final integration status is maintained in the Ticket 20 release-validation
+comment and linked PR checks.
 
 ## Manual QA and timing
 
@@ -73,7 +75,6 @@ fixed expected results and took approximately 5.5–7.5 seconds. No performance
 threshold or speed claim is made. The timing sample is separate from the
 nine-history integration harness.
 
-The final commit and completed CI matrix will be recorded in the
+The final commit and completed CI matrix are tracked in the
 [Ticket 20 release-validation comment](https://github.com/Ked57/difftrail/issues/20#issuecomment-6215990357)
-before PR #21 is marked ready. No npm publication or PR merge is part of this
-ticket.
+and linked PR checks. No npm publication or PR merge is part of this ticket.
