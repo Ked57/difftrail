@@ -10,7 +10,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 /** @param {string} command @param {string[]} args @param {string} cwd */
 function run(command, args, cwd) {
@@ -585,8 +585,48 @@ try {
       'packages/a/src/current/value.ts',
     ].join('\n') + '\n',
   );
+  const baseUrlFixture = join(temporary, 'base-url-repository');
+  await mkdir(baseUrlFixture);
+  run('git', ['init', '--quiet'], baseUrlFixture);
+  run(
+    'git',
+    ['config', 'user.email', 'fixture@example.invalid'],
+    baseUrlFixture,
+  );
+  run('git', ['config', 'user.name', 'Fixture'], baseUrlFixture);
+  const baseUrlFiles = {
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: { baseUrl: './src', paths: { '@/*': ['*'] } },
+    }),
+    'src/value.ts': 'export const value = 1;',
+    'src/consumer.ts':
+      "import {value} from '@/value'; export const page = value;",
+    'src/image.svg': '<svg>real</svg>',
+    'Page.vue': '<template><img src="@/image.svg" /></template>',
+    'value.ts': 'export const decoy = true;',
+    'image.svg': '<svg>decoy</svg>',
+  };
+  for (const [path, contents] of Object.entries(baseUrlFiles)) {
+    const destination = join(baseUrlFixture, path);
+    await mkdir(dirname(destination), { recursive: true });
+    await writeFile(destination, contents);
+  }
+  run('git', ['add', '--all'], baseUrlFixture);
+  run('git', ['commit', '--quiet', '-m', 'baseUrl aliases'], baseUrlFixture);
+  await writeFile(
+    join(baseUrlFixture, 'src/value.ts'),
+    'export const value = 2;',
+  );
+  run(
+    'git',
+    ['commit', '--quiet', '-am', 'change aliased provider'],
+    baseUrlFixture,
+  );
+  const baseUrlExpected = 'src/consumer.ts\nsrc/value.ts\n';
+  assert.equal(run(bin, [], baseUrlFixture), baseUrlExpected);
+  assert.equal(run(pnpmBin, [], baseUrlFixture), baseUrlExpected);
   console.log(
-    'Isolated npm and strict pnpm tarball installs, CLI, Vue assets with conflicting consumer parsers, config-alias resolver, bundled modules, license, metadata and TypeScript parser passed.',
+    'Isolated npm and strict pnpm tarball installs, explicit-baseUrl source aliases, Vue assets with conflicting consumer parsers, config-alias resolver, bundled modules, license, metadata and TypeScript parser passed.',
   );
 } finally {
   await rm(temporary, { recursive: true, force: true });
