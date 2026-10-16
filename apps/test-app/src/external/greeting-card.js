@@ -1,8 +1,8 @@
-import { greetingFor } from '@difftrail/example-shared';
+import { useGreeting } from '../composables/useGreeting';
 
 export default {
   name: 'GreetingCard',
-  data() {
-    return { greeting: greetingFor('Alex') };
+  setup() {
+    return useGreeting('Alex');
   },
 };

@@ -1,6 +1,6 @@
 # Ticket 07: runnable Vue example and Git histories
 
-`apps/test-app` is a Vite/Vue 3 application with Dashboard, Reports, and Settings routes. It imports a shared workspace package, uses local TypeScript aliases, and includes shared and page-specific modules. The source covers ordinary and setup SFC scripts, JavaScript and TypeScript, type-only re-export, literal dynamic import, external script/template/style blocks, CSS imports and URLs, static SVG references, and a Vite-generated `GlobalComponents` declaration for template auto-imports.
+`apps/test-app` is a Vite/Vue 3 application with Dashboard, Reports, and Settings routes. It imports a shared workspace package, uses local TypeScript aliases, and includes shared and page-specific modules. The source covers ordinary and setup SFC scripts, JavaScript and TypeScript, type-only re-export, literal dynamic import, external script/template/style blocks, CSS imports and URLs, static SVG references, and a Vite-generated `GlobalComponents` declaration for template auto-imports. The external GreetingCard script uses the shared `useGreeting` composable.
 
 The example is intentionally small and direct: its navigation uses ordinary links, and Vite serves each route through its SPA fallback. Run `pnpm install --frozen-lockfile`, `pnpm --filter @difftrail/test-app dev`, and `pnpm --filter @difftrail/test-app build` from the workspace root. `pnpm --filter @difftrail/test-app typecheck` checks the SFC scripts and templates with `vue-tsc`.
 
@@ -10,9 +10,8 @@ The packaged-CLI history seam catches integration among Git snapshots, actual so
 
 ## Verification
 
-- `pnpm --filter @difftrail/test-app build` passed with 38 modules transformed and generated `components.d.ts` from `unplugin-vue-components`.
+- `pnpm --filter @difftrail/test-app build` passed with 39 modules transformed and generated `components.d.ts` from `unplugin-vue-components`.
 - `pnpm --filter @difftrail/test-app typecheck` passed.
 - `pnpm build` passed for all workspaces.
-- `pnpm verify:fast` passed after Ticket 06 integration, including the app typecheck, repository lint/metrics, and 53 unit tests.
-- The 36 integration tests passed. The real-Git history harness reaches the generated component-map scenario and exposes a remaining analyzer gap: changing the committed `AutoBadge` mapping does not report its implicit `ReportsPage.vue` consumer. The full repro is recorded in `/private/tmp/ticket07-component-map-repro.md`; history acceptance remains pending the analyzer repair.
+- `pnpm verify:full` passed after Ticket 06 integration, including formatting, lint and metrics, typechecks, 60 unit tests, 39 integration tests, all 8 real-Git histories, package tarball tests, and Knip.
 - Browser page navigation and interaction remain assigned to the separate manual-QA job.
