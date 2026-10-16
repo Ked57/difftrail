@@ -105,6 +105,50 @@ test('follows a mapping-only change through its snapshot-owned consumer', async 
   }
 });
 
+function expectSnapshotMappingOwnership(
+  baseEdges: Awaited<ReturnType<typeof autoImportEdges>>,
+  headEdges: Awaited<ReturnType<typeof autoImportEdges>>,
+): void {
+  expect(baseEdges).toContainEqual({
+    importer: 'src/pages/ReportsPage.vue',
+    dependency: 'src/components/auto-primary/AutoBadge.vue',
+    specifier: './src/components/auto-primary/AutoBadge.vue',
+    kind: 'auto-import',
+  });
+  expect(baseEdges).not.toContainEqual({
+    importer: 'src/pages/ReportsPage.vue',
+    dependency: 'src/components/auto-alternate/AutoBadge.vue',
+    specifier: './src/components/auto-alternate/AutoBadge.vue',
+    kind: 'auto-import',
+  });
+  expect(headEdges).toContainEqual({
+    importer: 'src/pages/ReportsPage.vue',
+    dependency: 'src/components/auto-alternate/AutoBadge.vue',
+    specifier: './src/components/auto-alternate/AutoBadge.vue',
+    kind: 'auto-import',
+  });
+  expect(headEdges).not.toContainEqual({
+    importer: 'src/pages/ReportsPage.vue',
+    dependency: 'src/components/auto-primary/AutoBadge.vue',
+    specifier: './src/components/auto-primary/AutoBadge.vue',
+    kind: 'auto-import',
+  });
+  for (const edges of [baseEdges, headEdges]) {
+    expect(edges).toContainEqual({
+      importer: 'src/pages/ReportsPage.vue',
+      dependency: 'components.d.ts',
+      specifier: 'AutoBadge',
+      kind: 'metadata',
+    });
+    expect(edges).toContainEqual({
+      importer: 'src/pages/ReportsPage.vue',
+      dependency: 'vite.config.ts',
+      specifier: 'vite.config.ts',
+      kind: 'configuration',
+    });
+  }
+}
+
 test('tracks the recognized Vite component entrypoint through consumers and config provenance', async () => {
   const declaration = (target: string) =>
     [
@@ -152,6 +196,7 @@ test('tracks the recognized Vite component entrypoint through consumers and conf
       const headEdges = await autoImportEdges(comparison.headSnapshot);
       expect(comparison.base).toBe(primary);
       expect(comparison.head).toBe(alternate);
+      expectSnapshotMappingOwnership(baseEdges, headEdges);
       expect(
         selectImpact(
           comparison.seeds,
@@ -160,12 +205,6 @@ test('tracks the recognized Vite component entrypoint through consumers and conf
           comparison.headSnapshot.paths,
         ).files,
       ).toEqual(['components.d.ts', 'src/pages/ReportsPage.vue'].sort());
-      expect(headEdges).toContainEqual({
-        importer: 'src/pages/ReportsPage.vue',
-        dependency: 'src/components/auto-alternate/AutoBadge.vue',
-        specifier: './src/components/auto-alternate/AutoBadge.vue',
-        kind: 'auto-import',
-      });
     });
 
     await repo.commit({ 'vite.config.ts': config('auto-alternate') });
