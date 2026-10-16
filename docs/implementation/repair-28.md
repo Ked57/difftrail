@@ -63,3 +63,13 @@ Environment: Linux, Node 24.13.1, pnpm 10.34.7.
 Independent code review and installed-CLI manual QA remain assigned to separate
 jobs. Manual QA should exercise sibling isolation and a genuinely overlapping
 root/app ambiguity. Other platforms are unverified.
+
+## Canonical-root fixture correction
+
+The first macOS and Windows CI runs exposed a test expectation that used the
+fixture's temporary-path alias rather than its canonical absolute path. The CLI
+returned the correct impacted sets and canonical root. The same mismatch was
+reproduced on Linux by setting `TMPDIR` to a symbolic link: both sibling-history
+tests failed before the correction and passed after the expected root used
+`realpath(repo.root)`. Both exact JSON assertions remain in place. No production
+code or output contract changed in this follow-up.

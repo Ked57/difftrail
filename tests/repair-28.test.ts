@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, realpath, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'vitest';
 import { repository } from './helpers.js';
@@ -115,7 +115,7 @@ test.each([
         status: 0,
         stdout:
           JSON.stringify({
-            root: repo.root,
+            root: await realpath(repo.root),
             base,
             head,
             scope: 'static',
@@ -137,7 +137,7 @@ test.each([
         '--json',
       );
       expect(JSON.parse(configResult.stdout)).toEqual({
-        root: repo.root,
+        root: await realpath(repo.root),
         base: head,
         head: configHead,
         scope: 'static',
