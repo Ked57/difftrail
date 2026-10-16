@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { expect, test } from 'vitest';
 import { withComparison } from '@difftrail/git';
 import { repository } from '../../../tests/helpers.js';
@@ -28,11 +28,12 @@ function expectWorkspaceMapping(
 }
 
 test('resolves committed Vue component and auto-import declarations to actual consumers', async () => {
+  const componentDeclarations = ['nested', '..', 'components.d.ts'].join(sep);
   const repo = await repository({
     'vite.config.ts': [
       "import Components from 'unplugin-vue-components';",
       "import AutoImport from 'unplugin-auto-import';",
-      "export default [Components({ dts: 'components.d.ts' }), AutoImport({ dts: 'auto-imports.d.ts' })];",
+      `export default [Components({ dts: ${JSON.stringify(componentDeclarations)} }), AutoImport({ dts: 'auto-imports.d.ts' })];`,
     ].join('\n'),
     'components.d.ts': [
       "declare module 'vue' {",

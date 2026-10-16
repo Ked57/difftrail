@@ -1,0 +1,127 @@
+import { spawnSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+import { symlink } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { expect, test } from 'vitest';
+import { repository } from './helpers.js';
+
+const executable = resolve('packages/cli/dist/cli.js');
+
+function cli(cwd: string, ...args: string[]) {
+  const temporaryRoot = join(cwd, '.difftrail-test-tmp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  return spawnSync(process.execPath, [executable, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TMPDIR: temporaryRoot,
+      TMP: temporaryRoot,
+      TEMP: temporaryRoot,
+    },
+  });
+}
+
+test('built CLI keeps dangling and external opaque symlink paths as root seeds', async () => {
+  const repo = await repository({ 'README.md': 'tracked seed' });
+  try {
+    await symlink('missing-local.txt', join(repo.root, 'dangling.txt'));
+    await symlink('../outside.txt', join(repo.root, 'external.txt'));
+    repo.git('add', 'dangling.txt', 'external.txt');
+    repo.git('commit', '--quiet', '-m', 'track opaque links');
+    const result = cli(repo.root, '--json');
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout).files).toEqual([
+      'dangling.txt',
+      'external.txt',
+    ]);
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('built CLI retains opaque symlink add and delete seed paths', async () => {
+  const repo = await repository({ 'README.md': 'tracked seed' });
+  try {
+    const base = repo.git('rev-parse', 'HEAD');
+    await symlink('missing.txt', join(repo.root, 'dangling.txt'));
+    await symlink('../outside.txt', join(repo.root, 'external.txt'));
+    repo.git('add', 'dangling.txt', 'external.txt');
+    repo.git('commit', '--quiet', '-m', 'add opaque links');
+    const added = repo.git('rev-parse', 'HEAD');
+    const addedResult = cli(
+      repo.root,
+      '--base',
+      base,
+      '--head',
+      added,
+      '--json',
+    );
+    if (addedResult.status !== 0) throw new Error(JSON.stringify(addedResult));
+    expect({
+      status: addedResult.status,
+      stdout: addedResult.stdout,
+      stderr: addedResult.stderr,
+    }).toMatchObject({ status: 0 });
+    expect(JSON.parse(addedResult.stdout)).toMatchObject({
+      files: ['dangling.txt', 'external.txt'],
+      removed: [],
+    });
+    repo.git('rm', '--quiet', 'dangling.txt');
+    repo.git('commit', '--quiet', '-m', 'delete dangling link');
+    const deleted = repo.git('rev-parse', 'HEAD');
+    expect(
+      JSON.parse(
+        cli(repo.root, '--base', added, '--head', deleted, '--json').stdout,
+      ),
+    ).toMatchObject({ files: [], removed: ['dangling.txt'] });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test.each([
+  ['dangling', 'missing-local.js'],
+  ['external', '../outside.js'],
+  ['cyclic', 'entry.js'],
+])(
+  'built CLI fails atomically for a %s tracked source symlink',
+  async (_kind, target) => {
+    const repo = await repository({ 'README.md': 'tracked seed' });
+    try {
+      await symlink(target, join(repo.root, 'entry.js'));
+      repo.git('add', 'entry.js');
+      repo.git('commit', '--quiet', '-m', 'track source link');
+      const head = repo.git('rev-parse', 'HEAD');
+      const result = cli(repo.root, '--json');
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain(head);
+      expect(result.stderr).toContain('entry.js');
+      expect(result.stderr).toMatch(/no tracked target|unsafe target|cycle/);
+    } finally {
+      await repo.cleanup();
+    }
+  },
+);
+
+test('built CLI reports a Git submodule entry without fetching it', async () => {
+  const repo = await repository({ 'README.md': 'tracked seed' });
+  try {
+    repo.git(
+      'update-index',
+      '--add',
+      '--cacheinfo',
+      `160000,${'a'.repeat(40)},vendor/submodule`,
+    );
+    const head = repo.git('commit', '--quiet', '-m', 'track submodule');
+    const result = cli(repo.root, '--json');
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain(head);
+    expect(result.stderr).toContain('Git submodule entry vendor/submodule');
+  } finally {
+    await repo.cleanup();
+  }
+});

@@ -15,6 +15,10 @@ Status: implementation and local release checks in progress. Integration base:
   checks.
 - Replace stale pre-Ticket-07 root README scope and document the release
   rehearsal and current registry-name check.
+- Keep tracked Git symlink paths as seeds. Opaque links remain terminal without
+  reading their targets; analyzable aliases resolve only through contained,
+  tracked relative chains in the isolated endpoint snapshot. Submodule entries
+  produce a separate no-fetch diagnostic.
 
 ## Evidence
 
@@ -35,3 +39,13 @@ Status: implementation and local release checks in progress. Integration base:
   `pnpm verify:full` gate passed on macOS Node `22.23.1`, including 60 unit
   tests, 39 CLI integration tests, all 9 isolated example histories, isolated
   npm/pnpm packed consumers, and Knip. The OS/runtime matrix remains pending.
+- The second matrix exposed Windows-only virtual-path and diagnostic separator
+  failures. `path.posix` now handles the synthetic snapshot root, while
+  configured path separators are normalized using the Windows host separator
+  only; error display normalizes only native Windows separators. The following
+  combined repair pin will rerun the entire remote matrix.
+- Regression coverage exercises dangling/external opaque-link root, add, and
+  delete seeds; safe source-link chains as importer and target; fail-closed
+  dangling/external/cyclic source aliases with atomic CLI output; and gitlinks
+  without fetching. Focused analyzer and CLI regressions and `pnpm verify:fast`
+  pass locally; the final `pnpm verify:full` and remote matrix remain pending.

@@ -1,4 +1,4 @@
-import { writeFile, mkdir, access } from 'node:fs/promises';
+import { writeFile, mkdir, access, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { repository } from '../../../tests/helpers.js';
@@ -22,6 +22,39 @@ test('extracts real committed JS dependencies without current checkout changes',
         },
       ]);
       expect(graph.revision).toBe(comparison.head);
+    });
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test('preserves safe tracked source symlink identity for importers and targets', async () => {
+  const repo = await repository({
+    'actual.ts':
+      "import {dependency} from './dependency'; export {dependency};",
+    'dependency.ts': 'export const dependency = 1;',
+    'consumer.ts': "import {actual} from './alias'; export {actual};",
+  });
+  try {
+    await symlink('actual.ts', join(repo.root, 'alias.ts'));
+    await symlink('alias.ts', join(repo.root, 'linked.ts'));
+    repo.git('add', 'alias.ts', 'linked.ts');
+    repo.git('commit', '--quiet', '-m', 'track source alias');
+    await repo.commit({ 'dependency.ts': 'export const dependency = 2;' });
+    await withComparison(repo.root, async (comparison) => {
+      const graph = await extractGraph(comparison.headSnapshot);
+      expect(graph.edges).toContainEqual({
+        importer: 'consumer.ts',
+        dependency: 'alias.ts',
+        specifier: './alias',
+        kind: 'import',
+      });
+      expect(graph.edges).toContainEqual({
+        importer: 'alias.ts',
+        dependency: 'dependency.ts',
+        specifier: './dependency',
+        kind: 'import',
+      });
     });
   } finally {
     await repo.cleanup();

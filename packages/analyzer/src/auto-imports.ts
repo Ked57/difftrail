@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { dirname, posix, relative, resolve } from 'node:path';
+import { posix, resolve, sep } from 'node:path';
 import type { Snapshot } from '@difftrail/git';
 import ts from 'typescript';
 import { analysisGap as gap } from './errors.js';
@@ -299,9 +299,11 @@ function propertyNode(
 }
 
 function normalizeConfigPath(config: string, dts: string): string {
+  const virtualDts =
+    process.platform === 'win32' ? dts.split(sep).join('/') : dts;
   return posix.relative(
     '/difftrail-snapshot',
-    posix.resolve('/difftrail-snapshot', posix.dirname(config), dts),
+    posix.resolve('/difftrail-snapshot', posix.dirname(config), virtualDts),
   );
 }
 

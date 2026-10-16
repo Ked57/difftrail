@@ -18,4 +18,6 @@ Repeat `--filter GLOB` to retain paths matching any positive whole-path glob aft
 
 The CLI does not run tests or replace required checks. It never checks out a revision or runs project scripts.
 
+Tracked symlink paths remain eligible seeds. Opaque links are terminal paths; source and configuration aliases are followed only through tracked relative targets within the endpoint snapshot. Dangling or outside source aliases fail with no partial output. Git submodule entries are reported without fetching their contents.
+
 Node `createRequire` is recognized through direct `node:module` / `module` imports and direct factory result bindings. A loader based on the owning `import.meta.url` retains its static dependencies, including a loader with a different identifier name. Recognized factory bases or indirect factory uses that cannot be established statically fail with a diagnostic; the CLI does not guess their resolution base. Ordinary application helpers named `require` or `createRequire` are not treated as Node loaders.
