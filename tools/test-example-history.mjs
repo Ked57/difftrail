@@ -65,6 +65,7 @@ function copyWorkspace(name) {
   execFileSync('pnpm', ['install', '--frozen-lockfile'], {
     cwd,
     stdio: 'ignore',
+    shell: process.platform === 'win32',
   });
   return cwd;
 }
