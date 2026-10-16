@@ -59,7 +59,9 @@ and the linked PR checks.
   delete seeds; safe source-link chains as importer and target; fail-closed
   dangling/external/cyclic source aliases with atomic CLI output; and gitlinks
   without fetching. Focused analyzer and CLI regressions and `pnpm verify:fast`
-  pass locally; the final `pnpm verify:full` and remote matrix remain pending.
+  passed locally; the aggregate local `pnpm verify:full` exit status was not
+  captured. Final integration-head results are maintained in the Ticket 20
+  release-validation comment and linked PR checks.
 
 The integrated changes and measured evidence are recorded in
 [`Ticket 08 verification`](../verification/ticket-08.md). No runtime code changed
