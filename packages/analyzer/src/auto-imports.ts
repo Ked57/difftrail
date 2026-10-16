@@ -20,6 +20,7 @@ export interface MappingCollection {
   readonly runtimeComponentConfigs: readonly string[];
   readonly runtimeAutoImportConfigs: readonly string[];
   readonly unsupportedAutoImportConfigs: readonly string[];
+  readonly nonliteralAutoImportConfigs: readonly string[];
   readonly missingMetadata: ReadonlyMap<string, string>;
 }
 
@@ -33,6 +34,13 @@ export async function autoImportEdges(
 
 async function readMappings(snapshot: Snapshot): Promise<MappingCollection> {
   const configs = await readAutoImportConfigs(snapshot);
+  const nonliteral = configs.nonliteralAutoImportConfigs[0];
+  if (nonliteral)
+    throw gap(
+      snapshot,
+      nonliteral,
+      'auto-import options use an unsupported static expression; expected a static object literal',
+    );
   const unsupported = configs.unsupportedAutoImportConfigs[0];
   if (unsupported)
     throw gap(
@@ -92,6 +100,7 @@ async function readMappings(snapshot: Snapshot): Promise<MappingCollection> {
     runtimeComponentConfigs: configs.runtimeComponentConfigs,
     runtimeAutoImportConfigs: configs.runtimeAutoImportConfigs,
     unsupportedAutoImportConfigs: configs.unsupportedAutoImportConfigs,
+    nonliteralAutoImportConfigs: configs.nonliteralAutoImportConfigs,
     missingMetadata: configs.missingMetadata,
   };
 }
@@ -105,6 +114,7 @@ interface AutoImportConfig {
   readonly runtimeComponentConfigs: readonly string[];
   readonly runtimeAutoImportConfigs: readonly string[];
   readonly unsupportedAutoImportConfigs: readonly string[];
+  readonly nonliteralAutoImportConfigs: readonly string[];
   readonly missingMetadata: ReadonlyMap<string, string>;
 }
 
@@ -118,6 +128,7 @@ async function readAutoImportConfigs(
     runtimeComponentConfigs: [] as string[],
     runtimeAutoImportConfigs: [] as string[],
     unsupportedAutoImportConfigs: [] as string[],
+    nonliteralAutoImportConfigs: [] as string[],
   };
   const sourcePaths = snapshot.paths.filter((path) =>
     /\.(?:[cm]?js|[cm]?ts|jsx|tsx)$/.test(path),
@@ -133,6 +144,7 @@ interface ConfigAccumulator {
   readonly runtimeComponentConfigs: string[];
   readonly runtimeAutoImportConfigs: string[];
   readonly unsupportedAutoImportConfigs: string[];
+  readonly nonliteralAutoImportConfigs: string[];
 }
 
 async function readConfigFile(
@@ -140,13 +152,21 @@ async function readConfigFile(
   path: string,
   result: ConfigAccumulator,
 ): Promise<void> {
-  const source = await readFile(resolve(snapshot.directory, path), 'utf8');
-  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
-  const plugins = pluginImports(file);
+  const absolutePath = resolve(snapshot.directory, path);
+  const program = ts.createProgram([absolutePath], {
+    allowJs: true,
+    noLib: true,
+    noResolve: true,
+  });
+  const file = program.getSourceFile(absolutePath);
+  if (!file) return;
+  const checker = program.getTypeChecker();
+  const plugins = pluginImports(file, checker);
   for (const node of allNodes(file)) {
     if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression))
       continue;
-    const plugin = plugins.get(node.expression.text);
+    const binding = checker.getSymbolAtLocation(node.expression);
+    const plugin = binding && plugins.get(binding);
     if (!plugin) continue;
     recordPluginConfig(snapshot, path, plugin, node, result);
   }
@@ -159,9 +179,14 @@ function recordPluginConfig(
   call: ts.CallExpression,
   result: ConfigAccumulator,
 ): void {
-  const options = call.arguments.find(ts.isObjectLiteralExpression);
+  const firstArgument = call.arguments[0];
+  const options =
+    firstArgument && ts.isObjectLiteralExpression(firstArgument)
+      ? firstArgument
+      : undefined;
   if (!options) {
     if (plugin === 'components') result.runtimeComponentConfigs.push(path);
+    else if (firstArgument) result.nonliteralAutoImportConfigs.push(path);
     return;
   }
   const metadata = configuredMetadataPath(path, plugin, options);
@@ -228,8 +253,9 @@ const supportedPluginImports = new Map<string, 'components' | 'auto-import'>([
 
 function pluginImports(
   file: ts.SourceFile,
-): Map<string, 'components' | 'auto-import'> {
-  const result = new Map<string, 'components' | 'auto-import'>();
+  checker: ts.TypeChecker,
+): Map<ts.Symbol, 'components' | 'auto-import'> {
+  const result = new Map<ts.Symbol, 'components' | 'auto-import'>();
   for (const statement of file.statements) {
     if (
       !ts.isImportDeclaration(statement) ||
@@ -238,14 +264,17 @@ function pluginImports(
       continue;
     const plugin = supportedPluginImports.get(statement.moduleSpecifier.text);
     if (!plugin || !statement.importClause) continue;
-    if (statement.importClause.name)
-      result.set(statement.importClause.name.text, plugin);
+    const addBinding = (identifier: ts.Identifier): void => {
+      const symbol = checker.getSymbolAtLocation(identifier);
+      if (symbol) result.set(symbol, plugin);
+    };
+    if (statement.importClause.name) addBinding(statement.importClause.name);
     if (
       statement.importClause.namedBindings &&
       ts.isNamedImports(statement.importClause.namedBindings)
     )
       for (const item of statement.importClause.namedBindings.elements)
-        result.set(item.name.text, plugin);
+        addBinding(item.name);
   }
   return result;
 }
