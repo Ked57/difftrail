@@ -1,8 +1,13 @@
 import { readFile } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { DependencyEdge } from '@difftrail/core';
 import type { Snapshot } from '@difftrail/git';
-import { parseSnapshotConfig, type ValidatedConfigRoot } from './config.js';
+import ts from 'typescript';
+import {
+  aliasMatches,
+  parseSnapshotConfig,
+  type ValidatedConfigRoot,
+} from './config.js';
 import { groupSourcesByConfig } from './contexts.js';
 import type { SourceInspection } from './source.js';
 import { templateReferences } from './explicit.js';
@@ -64,6 +69,78 @@ export async function localReferenceEdges(
     });
   }
   return edges;
+}
+
+/** Keeps a configured import attached to the exact tracked source link it names. */
+export function configuredSymlinkEdges(
+  snapshot: Snapshot,
+  sources: readonly string[],
+  inspections: ReadonlyMap<string, SourceInspection>,
+  configRootsBySource: ReadonlyMap<
+    string,
+    readonly ValidatedConfigRoot[]
+  > = new Map(),
+): DependencyEdge[] {
+  const edges: DependencyEdge[] = [];
+  for (const group of groupSourcesByConfig(snapshot, sources)) {
+    if (!group.configPath) continue;
+    const packageRoots = [
+      ...new Set(
+        group.sources.flatMap(
+          (source) => configRootsBySource.get(source) ?? [],
+        ),
+      ),
+    ];
+    const options = parseSnapshotConfig(
+      snapshot,
+      group.configPath,
+      packageRoots,
+    ).parsed.options;
+    const patterns = Object.keys(options.paths ?? {});
+    for (const importer of group.sources) {
+      for (const relationship of inspections.get(importer)?.relationships ??
+        []) {
+        if (
+          !patterns.some((pattern) =>
+            aliasMatches(pattern, relationship.specifier),
+          )
+        )
+          continue;
+        const resolved = ts.resolveModuleName(
+          relationship.specifier,
+          resolve(snapshot.directory, importer),
+          {
+            ...options,
+            ...(options.baseUrl || typeof options.pathsBasePath !== 'string'
+              ? {}
+              : { baseUrl: options.pathsBasePath }),
+            preserveSymlinks: true,
+          },
+          ts.sys,
+        ).resolvedModule;
+        const target =
+          resolved && snapshotPath(snapshot, resolved.resolvedFileName);
+        if (!target || !snapshot.symlinkTargets.has(target)) continue;
+        edges.push({
+          importer,
+          dependency: target,
+          specifier: relationship.specifier,
+          kind: relationship.kind,
+        });
+      }
+    }
+  }
+  return edges;
+}
+
+function snapshotPath(snapshot: Snapshot, path: string): string | undefined {
+  const local = relative(
+    snapshot.directory,
+    isAbsolute(path) ? path : resolve(snapshot.directory, path),
+  );
+  if (local === '..' || local.startsWith(`..${sep}`) || isAbsolute(local))
+    return undefined;
+  return local.split(sep).join('/');
 }
 
 async function edgesForReference(

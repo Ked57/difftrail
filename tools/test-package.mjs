@@ -7,6 +7,7 @@ import {
   readdir,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -29,6 +30,59 @@ function run(command, args, cwd) {
     );
   return result.stdout;
 }
+
+/** @param {string} temporary @param {string[]} installedBins */
+async function testAliasedSourceLink(temporary, installedBins) {
+  const fixture = join(temporary, 'aliased-link-repository');
+  await mkdir(fixture);
+  run('git', ['init', '--quiet'], fixture);
+  run('git', ['config', 'user.email', 'fixture@example.invalid'], fixture);
+  run('git', ['config', 'user.name', 'Fixture'], fixture);
+  await writeFile(
+    join(fixture, 'tsconfig.json'),
+    JSON.stringify({ compilerOptions: { paths: { '@/*': ['*'] } } }),
+  );
+  await writeFile(join(fixture, 'first.ts'), 'export const value = 1;');
+  await writeFile(join(fixture, 'second.ts'), 'export const value = 2;');
+  await writeFile(
+    join(fixture, 'consumer.ts'),
+    "import {value} from '@/selected'; export {value};",
+  );
+  try {
+    await symlink('first.ts', join(fixture, 'selected.ts'));
+  } catch (error) {
+    const code =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof error.code === 'string'
+        ? error.code
+        : undefined;
+    if (
+      process.platform === 'win32' &&
+      typeof code === 'string' &&
+      ['EACCES', 'EINVAL', 'ENOSYS', 'EPERM'].includes(code)
+    )
+      return false;
+    throw error;
+  }
+  run('git', ['add', '--all'], fixture);
+  run('git', ['commit', '--quiet', '-m', 'baseline aliased link'], fixture);
+  const base = run('git', ['rev-parse', 'HEAD'], fixture).trim();
+  await rm(join(fixture, 'selected.ts'));
+  await symlink('second.ts', join(fixture, 'selected.ts'));
+  run('git', ['add', '--all'], fixture);
+  run('git', ['commit', '--quiet', '-m', 'retarget aliased link'], fixture);
+  const head = run('git', ['rev-parse', 'HEAD'], fixture).trim();
+  for (const installedBin of installedBins) {
+    const output = JSON.parse(
+      run(installedBin, ['--base', base, '--head', head, '--json'], fixture),
+    );
+    assert.deepEqual(output.files, ['consumer.ts', 'selected.ts']);
+  }
+  return true;
+}
+
 const temporary = await realpath(
   await mkdtemp(join(tmpdir(), 'difftrail-package-')),
 );
@@ -625,8 +679,12 @@ try {
   const baseUrlExpected = 'src/consumer.ts\nsrc/value.ts\n';
   assert.equal(run(bin, [], baseUrlFixture), baseUrlExpected);
   assert.equal(run(pnpmBin, [], baseUrlFixture), baseUrlExpected);
+  const aliasedLinkSupported = await testAliasedSourceLink(temporary, [
+    bin,
+    pnpmBin,
+  ]);
   console.log(
-    'Isolated npm and strict pnpm tarball installs, explicit-baseUrl source aliases, Vue assets with conflicting consumer parsers, config-alias resolver, bundled modules, license, metadata and TypeScript parser passed.',
+    `Isolated npm and strict pnpm tarball installs, explicit-baseUrl source aliases, Vue assets with conflicting consumer parsers, config-alias resolver, bundled modules, license, metadata and TypeScript parser passed; aliased source-link case ${aliasedLinkSupported ? 'passed' : 'skipped because this Windows runner does not allow creating symlinks'}.`,
   );
 } finally {
   await rm(temporary, { recursive: true, force: true });

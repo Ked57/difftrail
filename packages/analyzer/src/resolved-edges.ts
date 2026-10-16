@@ -31,6 +31,7 @@ export async function resolvedEdges(
   modules: readonly ResolvedModule[],
   inspections: ReadonlyMap<string, SourceInspection>,
   resolution: ResolvedEdgeEvidence,
+  configuredSymlinks: readonly DependencyEdge[] = [],
 ): Promise<DependencyEdge[]> {
   const tracked = new Set(snapshot.paths);
   const edges: DependencyEdge[] = [];
@@ -51,6 +52,7 @@ export async function resolvedEdges(
           inspections,
           resolution,
           tracked,
+          configuredSymlinks,
         )),
       );
   }
@@ -91,6 +93,7 @@ async function dependencyEdges(
   inspections: ReadonlyMap<string, SourceInspection>,
   resolution: ResolvedEdgeEvidence,
   tracked: ReadonlySet<string>,
+  configuredSymlinks: readonly DependencyEdge[],
 ): Promise<DependencyEdge[]> {
   if (dependency.couldNotResolve)
     throw gap(snapshot, importer, `cannot resolve ${dependency.module}`);
@@ -101,7 +104,12 @@ async function dependencyEdges(
     importer,
     dependency.module,
   );
+  const configuredTarget = configuredSymlinks.find(
+    (edge) =>
+      edge.importer === importer && edge.specifier === dependency.module,
+  )?.dependency;
   const target =
+    configuredTarget ??
     (await trackedSymlinkAlias(snapshot, importer, dependency)) ??
     repositoryPath(snapshot, dependency.resolved);
   if (!tracked.has(target) && external)
