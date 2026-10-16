@@ -168,7 +168,8 @@ function aliasRules(
       group.configPath,
       externalPackageRoots,
     );
-    const configuredBase = config.parsed.options.pathsBasePath;
+    const configuredBase =
+      config.parsed.options.baseUrl ?? config.parsed.options.pathsBasePath;
     const base =
       typeof configuredBase === 'string'
         ? configuredBase

@@ -124,9 +124,11 @@ function createPathsPlugin(
   return new TsconfigPathsPlugin({
     configFile,
     baseUrl:
-      typeof config.options.pathsBasePath === 'string'
-        ? config.options.pathsBasePath
-        : undefined,
+      typeof config.options.baseUrl === 'string'
+        ? config.options.baseUrl
+        : typeof config.options.pathsBasePath === 'string'
+          ? config.options.pathsBasePath
+          : undefined,
     extensions: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue'],
     silent: true,
   });
