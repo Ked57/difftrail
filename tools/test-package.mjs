@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import {
   mkdtemp,
@@ -518,6 +519,135 @@ try {
   assert.ok(
     baseGapResult.stderr.includes('remote-widget'),
     baseGapResult.stderr,
+  );
+  const autoImportOptionsFixture = join(
+    temporary,
+    'auto-import-options-repository',
+  );
+  await mkdir(autoImportOptionsFixture);
+  run('git', ['init', '--quiet'], autoImportOptionsFixture);
+  run(
+    'git',
+    ['config', 'user.email', 'fixture@example.invalid'],
+    autoImportOptionsFixture,
+  );
+  run('git', ['config', 'user.name', 'Fixture'], autoImportOptionsFixture);
+  const autoImportPackageRecord = {
+    version: '1.0.0',
+    resolved:
+      'https://registry.npmjs.org/unplugin-auto-import/-/unplugin-auto-import-1.0.0.tgz',
+    integrity: 'sha512-fixture',
+  };
+  const autoImportLockPackages = {
+    '': { devDependencies: { 'unplugin-auto-import': '1.0.0' } },
+    'node_modules/unplugin-auto-import': autoImportPackageRecord,
+  };
+  for (const [path, contents] of Object.entries({
+    'package.json': JSON.stringify({
+      private: true,
+      devDependencies: { 'unplugin-auto-import': '1.0.0' },
+    }),
+    'package-lock.json': JSON.stringify({
+      lockfileVersion: 3,
+      packages: autoImportLockPackages,
+    }),
+    'node_modules/.package-lock.json': JSON.stringify({
+      lockfileVersion: 3,
+      packages: autoImportLockPackages,
+    }),
+    'node_modules/unplugin-auto-import/package.json': JSON.stringify({
+      name: 'unplugin-auto-import',
+      version: '1.0.0',
+      main: 'index.js',
+    }),
+    'node_modules/unplugin-auto-import/index.js':
+      "module.exports = () => { throw new Error('plugin executed'); };",
+    'composables/usePrice.ts': 'export default () => 41;',
+    'pages/checkout.ts': 'export const total = usePrice();',
+    'vite.config.mjs': [
+      "import fs from 'node:fs';",
+      "import { default as ConfigureImports } from 'unplugin-auto-import';",
+      "const options = (fs.writeFileSync('executed', 'yes'), { dts: false, imports: [{ './composables/usePrice': ['usePrice'] }] });",
+      'export default ConfigureImports(options);',
+    ].join('\n'),
+  })) {
+    await mkdir(join(autoImportOptionsFixture, path, '..'), {
+      recursive: true,
+    });
+    await writeFile(join(autoImportOptionsFixture, path), contents);
+  }
+  run('git', ['add', '--all'], autoImportOptionsFixture);
+  run(
+    'git',
+    ['commit', '--quiet', '-m', 'unsupported auto-import options'],
+    autoImportOptionsFixture,
+  );
+  const unsupportedOptionsBase = run(
+    'git',
+    ['rev-parse', 'HEAD'],
+    autoImportOptionsFixture,
+  ).trim();
+  const literalOptionsConfig = [
+    "import { default as ConfigureImports } from 'unplugin-auto-import';",
+    "export default ConfigureImports({ dts: false, imports: [{ './composables/usePrice': ['usePrice'] }] });",
+  ].join('\n');
+  await writeFile(
+    join(autoImportOptionsFixture, 'vite.config.mjs'),
+    literalOptionsConfig,
+  );
+  await writeFile(
+    join(autoImportOptionsFixture, 'composables/usePrice.ts'),
+    'export default () => 42;',
+  );
+  run('git', ['add', '--all'], autoImportOptionsFixture);
+  run(
+    'git',
+    ['commit', '--quiet', '-m', 'use literal auto-import options'],
+    autoImportOptionsFixture,
+  );
+  const literalOptionsHead = run(
+    'git',
+    ['rev-parse', 'HEAD'],
+    autoImportOptionsFixture,
+  ).trim();
+  const installedBaseGap = spawnSync(
+    process.execPath,
+    [
+      join(packageRoot, 'dist', 'cli.js'),
+      '--base',
+      unsupportedOptionsBase,
+      '--head',
+      literalOptionsHead,
+    ],
+    { cwd: autoImportOptionsFixture, encoding: 'utf8' },
+  );
+  assert.equal(installedBaseGap.status, 1);
+  assert.equal(installedBaseGap.stdout, '');
+  assert.ok(installedBaseGap.stderr.includes(unsupportedOptionsBase));
+  assert.ok(installedBaseGap.stderr.includes('unsupported static expression'));
+  assert.equal(existsSync(join(autoImportOptionsFixture, 'executed')), false);
+  await writeFile(
+    join(autoImportOptionsFixture, 'composables/usePrice.ts'),
+    'export default () => 43;',
+  );
+  run('git', ['add', '--all'], autoImportOptionsFixture);
+  run(
+    'git',
+    ['commit', '--quiet', '-m', 'change mapped auto-import provider'],
+    autoImportOptionsFixture,
+  );
+  const literalOptionsChange = run(
+    'git',
+    ['rev-parse', 'HEAD'],
+    autoImportOptionsFixture,
+  ).trim();
+  assert.equal(
+    run(
+      bin,
+      ['--base', literalOptionsHead, '--head', literalOptionsChange],
+      autoImportOptionsFixture,
+    ),
+    'composables/usePrice.ts\npages/checkout.ts\n',
   );
   const workspaceFixture = join(temporary, 'workspace-export-fixture');
   await mkdir(workspaceFixture);
