@@ -24,6 +24,7 @@ export interface ExplicitInspection {
 const assetAttributes = new Set([
   'img:src',
   'source:src',
+  'video:src',
   'video:poster',
   'audio:src',
   'track:src',

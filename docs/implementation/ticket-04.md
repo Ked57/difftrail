@@ -23,8 +23,10 @@ files retained as provenance edges. Required local references must resolve to
 tracked files or analysis fails. Remote URLs, data URLs, and in-document
 fragments produce no repository edge. Non-literal dynamic template asset
 bindings fail explicitly. The supported template attributes are `img:src`,
-`source:src`, `video:poster`, `audio:src`, `track:src`, and SVG `image:href` /
-`image:xlink:href`.
+`source:src`, `video:src`, `video:poster`, `audio:src`, `track:src`, and SVG
+`image:href` / `image:xlink:href`. A static local video source therefore
+propagates changes through its inline or external template to the owning
+component and its consumers.
 
 The CLI package declares exact runtime dependencies for compiler-sfc and
 TypeScript. The executable leaves compiler-sfc external to avoid embedding its

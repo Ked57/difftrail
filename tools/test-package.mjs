@@ -217,6 +217,12 @@ try {
       '@import "./tokens.css"; .hero { content: "url(\'./not-an-asset.png\')"; background: url("./image.png") }',
     'tokens.css': ':root { --color: red; }',
     'image.png': 'before',
+    'Video.vue':
+      '<template><video src="./movie.mp4" poster="./poster.png"></video></template>',
+    'VideoConsumer.vue':
+      '<script setup>import Video from "./Video.vue";</script><template><Video /></template>',
+    'movie.mp4': 'movie before',
+    'poster.png': 'poster',
     'shape.ts': 'export interface Shape { readonly value: number }',
   }))
     await writeFile(join(vueFixture, path), contents);
@@ -238,11 +244,79 @@ try {
     vueFixture,
   );
   assert.equal(run(bin, [], vueFixture), 'Use.vue\nshape.ts\n');
+  await writeFile(join(vueFixture, 'movie.mp4'), 'movie after');
+  run('git', ['commit', '--quiet', '-am', 'change Vue movie'], vueFixture);
+  assert.equal(
+    run(bin, [], vueFixture),
+    'Video.vue\nVideoConsumer.vue\nmovie.mp4\n',
+  );
+  await writeFile(
+    join(vueFixture, 'Video.vue'),
+    '<template><video src="./missing.mp4"></video></template>',
+  );
+  run('git', ['commit', '--quiet', '-am', 'add missing Vue movie'], vueFixture);
+  const missingMovie = spawnSync(
+    process.execPath,
+    [join(packageRoot, 'dist', 'cli.js')],
+    {
+      cwd: vueFixture,
+      encoding: 'utf8',
+    },
+  );
+  assert.equal(missingMovie.status, 1);
+  assert.equal(missingMovie.stdout, '');
+  assert.ok(
+    missingMovie.stderr.includes(
+      'cannot resolve required local reference ./missing.mp4',
+    ),
+  );
+  await writeFile(
+    join(vueFixture, 'Video.vue'),
+    '<template><video src="./movie.mp4"></video></template>',
+  );
+  run(
+    'git',
+    ['commit', '--quiet', '-am', 'repair missing Vue movie'],
+    vueFixture,
+  );
+  await writeFile(
+    join(vueFixture, 'Video.vue'),
+    '<template><video :src="movie"></video></template>',
+  );
+  run('git', ['commit', '--quiet', '-am', 'add dynamic Vue movie'], vueFixture);
+  const dynamicMovie = spawnSync(
+    process.execPath,
+    [join(packageRoot, 'dist', 'cli.js')],
+    { cwd: vueFixture, encoding: 'utf8' },
+  );
+  assert.equal(dynamicMovie.status, 1);
+  assert.equal(dynamicMovie.stdout, '');
+  assert.ok(
+    dynamicMovie.stderr.includes(
+      'dynamic template asset requires static resolution',
+    ),
+  );
+  await writeFile(
+    join(vueFixture, 'Video.vue'),
+    '<template><video src="./movie.mp4"></video></template>',
+  );
+  run(
+    'git',
+    ['commit', '--quiet', '-am', 'repair dynamic Vue movie'],
+    vueFixture,
+  );
+  const validMovieHead = run('git', ['rev-parse', 'HEAD'], vueFixture).trim();
   await writeFile(join(vueFixture, 'Page.vue'), '<template><main></template>');
   run('git', ['commit', '--quiet', '-am', 'invalid Vue template'], vueFixture);
   const invalidVue = spawnSync(
     process.execPath,
-    [join(packageRoot, 'dist', 'cli.js')],
+    [
+      join(packageRoot, 'dist', 'cli.js'),
+      '--base',
+      validMovieHead,
+      '--head',
+      'HEAD',
+    ],
     { cwd: vueFixture, encoding: 'utf8' },
   );
   assert.equal(invalidVue.status, 1);
