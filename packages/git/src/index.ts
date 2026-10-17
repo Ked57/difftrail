@@ -322,9 +322,12 @@ export async function withComparison<T>(
   run: (comparison: Comparison) => Promise<T>,
   options: ComparisonOptions = {},
 ): Promise<T> {
-  const gitRoot = (await git(cwd, ['rev-parse', '--show-toplevel']))
-    .toString()
-    .trimEnd();
+  const gitRootResponse = await git(cwd, ['rev-parse', '--show-toplevel']);
+  if (gitRootResponse[gitRootResponse.length - 1] !== 0x0a)
+    throw new Error(
+      'Git repository root response is missing its line delimiter',
+    );
+  const gitRoot = gitRootResponse.subarray(0, -1).toString();
   const root = await realpath(gitRoot);
   const { base, head } = await selectEndpoints(root, options);
   const temporaryPath = await mkdtemp(join(tmpdir(), 'difftrail-snapshots-'));
