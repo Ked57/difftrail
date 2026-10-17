@@ -649,6 +649,114 @@ try {
     ),
     'composables/usePrice.ts\npages/checkout.ts\n',
   );
+  const siblingFixture = join(temporary, 'auto-import-sibling-repository');
+  await mkdir(siblingFixture);
+  run('git', ['init', '--quiet'], siblingFixture);
+  run(
+    'git',
+    ['config', 'user.email', 'fixture@example.invalid'],
+    siblingFixture,
+  );
+  run('git', ['config', 'user.name', 'Fixture'], siblingFixture);
+  const siblingLock = {
+    name: 'sibling-apps',
+    lockfileVersion: 3,
+    packages: {
+      '': { name: 'sibling-apps' },
+      'apps/a': {
+        name: 'app-a',
+        dependencies: { 'unplugin-auto-import': '1.0.0' },
+      },
+      'apps/b': {
+        name: 'app-b',
+        dependencies: { 'unplugin-auto-import': '1.0.0' },
+      },
+      'node_modules/unplugin-auto-import': autoImportRecord,
+    },
+  };
+  for (const [path, contents] of Object.entries({
+    '.gitignore': 'node_modules/\n',
+    'package.json': JSON.stringify({ name: 'sibling-apps', private: true }),
+    'package-lock.json': JSON.stringify(siblingLock),
+    'apps/a/package.json': JSON.stringify({
+      name: 'app-a',
+      dependencies: { 'unplugin-auto-import': '1.0.0' },
+    }),
+    'apps/a/vite.config.ts': [
+      "import AutoImport from 'unplugin-auto-import';",
+      "export default AutoImport({ dts: false, imports: [{ './useValue': ['useValue'] }] });",
+    ].join('\n'),
+    'apps/a/useValue.ts': 'export default () => "a";',
+    'apps/a/page.ts': 'export const value = useValue();',
+    'apps/b/package.json': JSON.stringify({
+      name: 'app-b',
+      dependencies: { 'unplugin-auto-import': '1.0.0' },
+    }),
+    'apps/b/vite.config.ts': [
+      "import AutoImport from 'unplugin-auto-import';",
+      "export default AutoImport({ dts: false, imports: [{ './useValue': ['useValue'] }] });",
+    ].join('\n'),
+    'apps/b/useValue.ts': 'export default () => "b";',
+    'apps/b/page.ts': 'export const value = useValue();',
+  })) {
+    await mkdir(join(siblingFixture, path, '..'), { recursive: true });
+    await writeFile(join(siblingFixture, path), contents);
+  }
+  run('git', ['add', '--all'], siblingFixture);
+  run(
+    'git',
+    ['commit', '--quiet', '-m', 'sibling app baseline'],
+    siblingFixture,
+  );
+  const siblingBase = run('git', ['rev-parse', 'HEAD'], siblingFixture).trim();
+  const autoImportModule = join(
+    siblingFixture,
+    'node_modules/unplugin-auto-import',
+  );
+  await mkdir(autoImportModule, { recursive: true });
+  await writeFile(
+    join(autoImportModule, 'package.json'),
+    JSON.stringify({
+      name: 'unplugin-auto-import',
+      version: '1.0.0',
+      main: 'index.js',
+    }),
+  );
+  await writeFile(
+    join(autoImportModule, 'index.js'),
+    'module.exports = options => options;',
+  );
+  await mkdir(join(siblingFixture, 'node_modules'), { recursive: true });
+  await writeFile(
+    join(siblingFixture, 'node_modules/.package-lock.json'),
+    JSON.stringify({
+      name: 'sibling-apps',
+      lockfileVersion: 3,
+      packages: {
+        '': { name: 'sibling-apps' },
+        'node_modules/unplugin-auto-import': autoImportRecord,
+      },
+    }),
+  );
+  await writeFile(
+    join(siblingFixture, 'apps/a/useValue.ts'),
+    'export default () => "a changed";',
+  );
+  run(
+    'git',
+    ['commit', '--quiet', '-am', 'change app A provider'],
+    siblingFixture,
+  );
+  assert.deepEqual(
+    JSON.parse(
+      run(
+        bin,
+        ['--base', siblingBase, '--head', 'HEAD', '--json'],
+        siblingFixture,
+      ),
+    ).files,
+    ['apps/a/page.ts', 'apps/a/useValue.ts'],
+  );
   const workspaceFixture = join(temporary, 'workspace-export-fixture');
   await mkdir(workspaceFixture);
   run('git', ['init', '--quiet'], workspaceFixture);
@@ -674,13 +782,18 @@ try {
         private: true,
         type: 'module',
         workspaces: ['packages/*', 'apps/*'],
+        devDependencies: { 'unplugin-auto-import': '1.0.0' },
       }),
       '.gitignore': 'node_modules/\n',
       'package-lock.json': JSON.stringify({
         name: 'workspace-root',
         lockfileVersion: 3,
         packages: {
-          '': { name: 'workspace-root', workspaces: ['packages/*', 'apps/*'] },
+          '': {
+            name: 'workspace-root',
+            workspaces: ['packages/*', 'apps/*'],
+            devDependencies: { 'unplugin-auto-import': '1.0.0' },
+          },
           'apps/site': {
             name: 'site',
             devDependencies: { 'unplugin-auto-import': '1.0.0' },
@@ -708,6 +821,10 @@ try {
         'export declare function useShared(): number;',
       'packages/shared/src/import.js': 'export const useShared = () => 1;',
       'packages/shared/src/require.cjs': 'exports.useShared = () => 2;',
+      'vite.config.ts': [
+        "import AutoImport from 'unplugin-auto-import';",
+        "export default AutoImport({ dts: false, imports: [{ '@demo/shared': ['useShared'] }] });",
+      ].join('\n'),
       'apps/site/package.json': JSON.stringify({
         name: 'site',
         type: 'module',
@@ -736,7 +853,10 @@ try {
         name: 'workspace-root',
         lockfileVersion: 3,
         packages: {
-          '': { name: 'workspace-root' },
+          '': {
+            name: 'workspace-root',
+            devDependencies: { 'unplugin-auto-import': '1.0.0' },
+          },
           'node_modules/unplugin-auto-import': { version: '1.0.0' },
         },
       }),
