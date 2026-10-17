@@ -147,3 +147,8 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Turborepo and quality artifacts
+.turbo/
+reports/
+.stryker-tmp/

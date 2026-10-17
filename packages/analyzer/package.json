@@ -1,0 +1,23 @@
+{
+  "name": "@difftrail/analyzer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --outdir=dist --platform=node --format=esm --packages=external"
+  },
+  "dependencies": {
+    "@difftrail/core": "workspace:*",
+    "@difftrail/git": "workspace:*",
+    "@vue/compiler-dom": "3.5.44",
+    "@vue/compiler-sfc": "3.5.44",
+    "dependency-cruiser": "18.6.0",
+    "enhanced-resolve": "5.26.0",
+    "postcss": "8.5.30",
+    "postcss-value-parser": "4.2.0",
+    "tsconfig-paths-webpack-plugin": "4.2.0",
+    "typescript": "6.0.3",
+    "yaml": "2.9.1"
+  }
+}

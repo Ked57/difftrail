@@ -1,0 +1,37 @@
+{
+  "name": "difftrail",
+  "version": "0.1.0",
+  "description": "Find repository files impacted by committed changes.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ked57/difftrail.git",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "difftrail": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node ../../tools/build-cli.mjs",
+    "prepack": "pnpm build"
+  },
+  "dependencies": {
+    "@vue/compiler-sfc": "3.5.44",
+    "dependency-cruiser": "18.6.0",
+    "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@difftrail/analyzer": "workspace:*",
+    "@difftrail/core": "workspace:*",
+    "@difftrail/git": "workspace:*"
+  }
+}

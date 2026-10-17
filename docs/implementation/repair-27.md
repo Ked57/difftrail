@@ -1,0 +1,7 @@
+# Repair 27: reject unsupported auto-import options
+
+The analyzer now recognizes auto-import calls by their imported TypeScript binding. Renamed imports remain supported, while a nested shadowing parameter and an unrelated same-named function remain ordinary application code. Calls with nonliteral options produce an analysis gap at that endpoint. The analyzer parses configuration source only; it does not invoke the expression, plugin, or project configuration.
+
+Before the fix, a renamed imported plugin called with an identifier options value produced no dependency edges. The extractor regressions now cover that identifier case, a call-result expression, renamed imports, shadowing controls, a direct literal mapping, and `.mjs` configuration scanning. The built CLI histories cover both unsupported expression forms at base and head, status 1 with zero stdout in text, JSON, NUL, and filtered invocations, plus exact provider/consumer output for literal options and shadowing controls. The isolated tarball check exercises the shipped executable with a throwing plugin stub, verifies a base-endpoint gap, and checks the literal provider/consumer result.
+
+`pnpm verify:fast` passed with 77 unit tests and all configured format, lint, type, and coverage gates. `pnpm verify:full` passed with those gates, 52 built-CLI integration tests, nine example histories, the isolated npm and pnpm package checks, and Knip. The parent integration job owns the separate installed-executable manual QA and independent review.
