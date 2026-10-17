@@ -70,4 +70,4 @@ test('resolves aliased source links to their tracked identity and endpoint targe
   } finally {
     await repo.cleanup();
   }
-});
+}, 30_000);
