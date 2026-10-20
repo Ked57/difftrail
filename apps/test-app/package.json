@@ -7,7 +7,9 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run --config vitest.config.mjs",
+    "test:affected": "node scripts/affected-tests.mjs --execute -- --json --filter **/*.test.ts --filter **/*.e2e.ts"
   },
   "dependencies": {
     "@difftrail/example-shared": "workspace:*",
@@ -17,6 +19,7 @@
     "@vitejs/plugin-vue": "6.0.3",
     "unplugin-vue-components": "31.0.0",
     "vite": "8.3.4",
+    "vitest": "4.1.11",
     "vue-tsc": "^3.3.13"
   }
 }

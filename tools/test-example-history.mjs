@@ -147,6 +147,7 @@ try {
         'apps/test-app/src/main.ts',
         'apps/test-app/src/pages/DashboardPage.vue',
         'apps/test-app/src/utils/dashboard-summary.ts',
+        'apps/test-app/tests/unit/dashboard-summary.test.ts',
       ].sort();
       const base = runGit(cwd, ['rev-parse', 'HEAD^']);
       const head = runGit(cwd, ['rev-parse', 'HEAD']);
@@ -228,6 +229,7 @@ try {
         cwd,
         [
           'apps/test-app/components.d.ts',
+          'apps/test-app/scripts/affected-tests.mjs',
           'apps/test-app/src/App.vue',
           'apps/test-app/src/components/GreetingCard.vue',
           'apps/test-app/src/components/MetricCard.vue',
@@ -244,8 +246,14 @@ try {
           'apps/test-app/src/utils/dashboard-summary.ts',
           'apps/test-app/src/utils/settings-mode.ts',
           'apps/test-app/src/vite-env.d.ts',
+          'apps/test-app/tests/component/MetricCard.test.ts',
+          'apps/test-app/tests/e2e/report-details.e2e.ts',
+          'apps/test-app/tests/e2e/settings-journey.e2e.ts',
+          'apps/test-app/tests/unit/dashboard-summary.test.ts',
+          'apps/test-app/tests/unit/settings-mode.test.ts',
           'apps/test-app/tsconfig.json',
           'apps/test-app/vite.config.ts',
+          'apps/test-app/vitest.config.mjs',
         ].sort(),
         [],
         ['--json'],

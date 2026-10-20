@@ -77,6 +77,9 @@ importers:
       vite:
         specifier: 8.3.4
         version: 8.3.4(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(vite@8.3.4(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
       vue-tsc:
         specifier: ^3.3.13
         version: 3.3.13(typescript@6.0.3)
