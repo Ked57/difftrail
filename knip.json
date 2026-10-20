@@ -19,6 +19,10 @@
       "project": ["src/**/*.ts", "tests/**/*.mjs"]
     },
     "apps/*": {},
+    "apps/react-app": {
+      "entry": ["src/components/unrelated/Note.tsx", "tests/**/*.ts"],
+      "ignoreDependencies": ["@svgr/plugin-jsx"]
+    },
     "apps/test-app": {
       "entry": [
         "src/external/greeting-card.js",
