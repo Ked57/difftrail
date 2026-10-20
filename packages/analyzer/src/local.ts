@@ -12,6 +12,8 @@ import { groupSourcesByConfig } from './contexts.js';
 import type { SourceInspection } from './source.js';
 import { templateReferences } from './explicit.js';
 import { analysisGap as gap } from './errors.js';
+import { externalEvidenceFor, type ExternalEvidence } from './external.js';
+import { packageName } from './external-manifest.js';
 
 interface AliasRule {
   readonly pattern: string;
@@ -28,6 +30,7 @@ export async function localReferenceEdges(
     string,
     readonly ValidatedConfigRoot[]
   > = new Map(),
+  external: ExternalEvidence = { byImporterAndSpecifier: new Map() },
 ): Promise<DependencyEdge[]> {
   const tracked = new Set(snapshot.paths);
   const aliasSources = [
@@ -47,6 +50,7 @@ export async function localReferenceEdges(
         reference,
         aliases.get(importer) ?? [],
         tracked,
+        external,
       );
       edges.push(...resolved);
       for (const edge of configurationEdgesForReference(
@@ -149,7 +153,16 @@ async function edgesForReference(
   reference: SourceInspection['localReferences'][number],
   aliases: readonly AliasRule[],
   tracked: ReadonlySet<string>,
+  external: ExternalEvidence,
 ): Promise<DependencyEdge[]> {
+  const packaged = cssPackageEdges(
+    snapshot,
+    importer,
+    reference,
+    aliases,
+    external,
+  );
+  if (packaged) return packaged;
   if (isTerminal(reference.specifier)) return [];
   const target = resolveReference(
     snapshot,
@@ -174,6 +187,34 @@ async function edgesForReference(
       ? await externalTemplateEdges(snapshot, target, aliases, tracked)
       : [];
   return [edge, ...templateEdges];
+}
+
+function cssPackageEdges(
+  snapshot: Snapshot,
+  importer: string,
+  reference: SourceInspection['localReferences'][number],
+  aliases: readonly AliasRule[],
+  external: ExternalEvidence,
+): DependencyEdge[] | undefined {
+  if (
+    reference.kind !== 'css-import' ||
+    !packageName(reference.specifier) ||
+    aliases.some((rule) => aliasMatches(rule.pattern, reference.specifier))
+  )
+    return undefined;
+  const identity = externalEvidenceFor(external, importer, reference.specifier);
+  if (!identity)
+    throw gap(
+      snapshot,
+      importer,
+      `CSS import ${reference.specifier} has no validated external package identity`,
+    );
+  return [identity.manifest, identity.lockfile].map((dependency) => ({
+    importer,
+    dependency,
+    specifier: reference.specifier,
+    kind: 'metadata',
+  }));
 }
 
 function configurationEdgesForReference(

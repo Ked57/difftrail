@@ -9,5 +9,12 @@
     "checkJs": false,
     "jsx": "preserve"
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.js", "components.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "src/**/*.js",
+    "components.d.ts",
+    "auto-imports.d.ts",
+    "typed-router.d.ts"
+  ]
 }

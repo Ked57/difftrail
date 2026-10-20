@@ -12,5 +12,9 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AutoBadge: typeof import('./src/components/auto-primary/AutoBadge.vue')['default']
+    IExampleMark: typeof import('~icons/example/mark')['default']
+    ILucideHouse: typeof import('~icons/lucide/house')['default']
+    RouterLink: typeof import('vue-router')['RouterLink']
+    RouterView: typeof import('vue-router')['RouterView']
   }
 }

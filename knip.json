@@ -19,10 +19,20 @@
       "project": ["src/**/*.ts", "tests/**/*.mjs"]
     },
     "apps/*": {},
+    "apps/react-app": {
+      "entry": ["src/components/unrelated/Note.tsx", "tests/**/*.ts"],
+      "ignoreDependencies": ["@svgr/plugin-jsx"]
+    },
+    "apps/effect-api": {
+      "entry": ["src/effects/unused-note.ts", "tests/**/*.ts"]
+    },
     "apps/test-app": {
       "entry": [
         "src/external/greeting-card.js",
-        "src/components/auto-alternate/AutoBadge.vue"
+        "src/external/greeting-card.css",
+        "src/components/auto-alternate/AutoBadge.vue",
+        "src/routes/*.vue",
+        "tests/**/*.ts"
       ]
     }
   }

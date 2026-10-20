@@ -8,6 +8,7 @@ import { groupSourcesByConfig } from './contexts.js';
 import { aliasMatches, parseSnapshotConfig } from './config.js';
 import { prepareWorkspaces, workspaceForSpecifier } from './workspaces.js';
 import { prepareExternalEvidence, type ExternalEvidence } from './external.js';
+import { packageName } from './external-manifest.js';
 import { externalEvidenceGap } from './external-errors.js';
 import {
   configProviderEdges,
@@ -199,6 +200,7 @@ export async function extractGraph(snapshot: Snapshot): Promise<SnapshotGraph> {
     sources,
     requiredSpecifiers,
     resolution.configRootsBySource,
+    resolution.external,
   );
   const configuredLinks = configuredSymlinkEdges(
     snapshot,
@@ -290,18 +292,24 @@ async function prepareInstalledEvidence(
       snapshot,
       sources,
     );
+    const evidenceSources = styleImporters(sources, requiredSpecifiers);
     const aliases = configuredAliases(
       snapshot,
-      sources,
+      evidenceSources,
       configEvidence.rootsBySource,
     );
     const specifiers = includeConfigSpecifiers(
-      externalSpecifiers(sources, requiredSpecifiers, workspaces, aliases),
+      externalSpecifiers(
+        evidenceSources,
+        requiredSpecifiers,
+        workspaces,
+        aliases,
+      ),
       configEvidence.specifiers,
     );
     const external = await prepareExternalEvidence(
       snapshot,
-      sources,
+      evidenceSources,
       specifiers,
     );
     return {
@@ -347,6 +355,22 @@ function configuredAliases(
   return result;
 }
 
+function styleImporters(
+  sources: readonly string[],
+  inspections: ReadonlyMap<string, SourceInspection>,
+): string[] {
+  const styles = [...inspections]
+    .filter(([, inspection]) =>
+      inspection.localReferences.some(
+        (reference) =>
+          reference.kind === 'css-import' &&
+          packageName(reference.specifier) !== undefined,
+      ),
+    )
+    .map(([file]) => file);
+  return [...new Set([...sources, ...styles])];
+}
+
 function externalSpecifiers(
   sources: readonly string[],
   inspections: ReadonlyMap<string, SourceInspection>,
@@ -356,7 +380,12 @@ function externalSpecifiers(
   return new Map(
     sources.map((source) => [
       source,
-      (inspections.get(source)?.relationships ?? [])
+      [
+        ...(inspections.get(source)?.relationships ?? []),
+        ...(inspections.get(source)?.localReferences ?? []).filter(
+          (reference) => reference.kind === 'css-import',
+        ),
+      ]
         .map((relationship) => relationship.specifier)
         .filter(
           (specifier) =>

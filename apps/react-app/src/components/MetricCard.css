@@ -1,0 +1,23 @@
+.metric-card {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1.25rem;
+  border: 1px solid #dce3e9;
+  border-radius: 0.9rem;
+  background: #fff;
+}
+.metric-card p,
+.metric-card small {
+  margin: 0;
+  color: #667282;
+}
+.metric-card strong {
+  font-size: 1.8rem;
+  letter-spacing: -0.04em;
+}
+.metric-mark {
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-right: 0.35rem;
+  vertical-align: baseline;
+}

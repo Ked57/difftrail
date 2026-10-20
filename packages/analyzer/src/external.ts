@@ -15,6 +15,7 @@ import {
   readSnapshotJson as readJson,
   type PackageManifest,
 } from './external-manifest.js';
+import { evidencePackageName } from './virtual-modules.js';
 
 interface ExternalPackageEvidence {
   readonly name: string;
@@ -464,7 +465,7 @@ export function externalEvidenceFor(
   importer: string,
   specifier: string,
 ): ExternalPackageEvidence | undefined {
-  const name = packageName(specifier);
+  const name = evidencePackageName(specifier) ?? packageName(specifier);
   return name
     ? evidence.byImporterAndSpecifier.get(`${importer}\0${name}`)
     : undefined;
