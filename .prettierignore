@@ -5,4 +5,6 @@ reports/
 .stryker-tmp/
 **/dist/
 **/components.d.ts
+**/auto-imports.d.ts
+**/typed-router.d.ts
 docs/plans/

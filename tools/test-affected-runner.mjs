@@ -121,7 +121,11 @@ function select(cwd) {
   );
 }
 
-/** @param {string} cwd @param {readonly string[]} files */
+/**
+ * @param {string} cwd
+ * @param {readonly string[]} files
+ * @param {string} name
+ */
 function expectSelection(cwd, files, name) {
   const result = select(cwd);
   assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
@@ -138,8 +142,10 @@ function expectSelection(cwd, files, name) {
   if (files.length > 0) assert.equal(output.status, 0);
 }
 
-/** @type {readonly Scenario[]} */
+/** @type {string} */
 const navigation = 'apps/test-app/tests/e2e/navigation.e2e.ts';
+
+/** @type {readonly Scenario[]} */
 const scenarios = [
   {
     name: 'unit-source',
