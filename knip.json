@@ -23,6 +23,9 @@
       "entry": ["src/components/unrelated/Note.tsx", "tests/**/*.ts"],
       "ignoreDependencies": ["@svgr/plugin-jsx"]
     },
+    "apps/effect-api": {
+      "entry": ["src/effects/unused-note.ts", "tests/**/*.ts"]
+    },
     "apps/test-app": {
       "entry": [
         "src/external/greeting-card.js",
