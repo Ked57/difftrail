@@ -31,6 +31,8 @@ export default defineConfig({
       compiler: 'jsx',
       jsx: 'react',
       customCollections: {
+        // The Vue example already registers `example`. Difftrail keeps one
+        // directory per collection name, so this app imports `react`.
         example: FileSystemIconLoader('./src/assets/icons'),
         react: FileSystemIconLoader('./src/assets/icons'),
       },
