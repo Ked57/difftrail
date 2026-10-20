@@ -22,3 +22,27 @@ test('returns the settings email error when @ is missing', async () => {
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({ error: 'Enter an email address.' });
 });
+
+test('rejects a settings body that is not an object', async () => {
+  const response = await postSettings(null);
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: 'Enter an email address.' });
+});
+
+test('rejects a numeric settings body', async () => {
+  const response = await postSettings(12);
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: 'Enter an email address.' });
+});
+
+test('rejects a settings body without an email', async () => {
+  const response = await postSettings({});
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: 'Enter an email address.' });
+});
+
+test('rejects a settings email that is not text', async () => {
+  const response = await postSettings({ email: 12 });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: 'Enter an email address.' });
+});

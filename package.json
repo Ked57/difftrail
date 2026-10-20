@@ -27,6 +27,7 @@
     "test:mutation:app": "pnpm --dir apps/test-app exec stryker run",
     "test:mutation:react": "pnpm --dir apps/react-app exec stryker run",
     "test:mutation:effect": "pnpm --dir apps/effect-api exec stryker run",
+    "test:mutation:examples": "pnpm test:mutation:app && pnpm test:mutation:react && pnpm test:mutation:effect",
     "test:package": "node tools/test-package.mjs"
   },
   "devDependencies": {

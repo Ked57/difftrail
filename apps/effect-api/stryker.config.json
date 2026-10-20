@@ -5,7 +5,11 @@
     "configFile": "vitest.config.mjs",
     "related": false
   },
-  "mutate": ["src/effects/reports.ts", "src/effects/settings.ts"],
+  "mutate": [
+    "src/effects/reports.ts",
+    "src/effects/settings.ts",
+    "src/routes.ts"
+  ],
   "coverageAnalysis": "perTest",
   "concurrency": 2,
   "reporters": ["clear-text", "html"],
