@@ -1,8 +1,10 @@
-import assert from 'node:assert';
+import { expect, test } from 'vitest';
 import { describeMode } from '../../src/utils/settings-mode.js';
 
-const strict = describeMode(true);
-const relaxed = describeMode(false);
-assert.notEqual(strict, relaxed);
-assert.ok(strict.length > 0);
-assert.ok(relaxed.length > 0);
+test('describes strict and relaxed analysis differently', () => {
+  const strict = describeMode(true);
+  const relaxed = describeMode(false);
+  expect(strict).not.toBe(relaxed);
+  expect(strict.length).toBeGreaterThan(0);
+  expect(relaxed.length).toBeGreaterThan(0);
+});

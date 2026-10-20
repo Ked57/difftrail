@@ -1,5 +1,7 @@
-import assert from 'node:assert';
+import { expect, test } from 'vitest';
 import ReportDetails from '../../src/components/ReportDetails.vue';
 
-assert.equal(typeof ReportDetails, 'object');
-assert.ok(ReportDetails);
+test('loads the lazy report details panel', () => {
+  expect(typeof ReportDetails).toBe('object');
+  expect(ReportDetails).toBeTruthy();
+});

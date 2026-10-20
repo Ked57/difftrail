@@ -1,4 +1,6 @@
-import assert from 'node:assert';
+import { expect, test } from 'vitest';
 import { dashboardSummary } from '../../src/utils/dashboard-summary.js';
 
-assert.match(dashboardSummary.files, /^\d{2}$/);
+test('reports a two-digit dashboard file count', () => {
+  expect(dashboardSummary.files).toMatch(/^\d{2}$/);
+});

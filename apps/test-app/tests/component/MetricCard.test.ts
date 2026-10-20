@@ -1,5 +1,7 @@
-import assert from 'node:assert';
+import { expect, test } from 'vitest';
 import MetricCard from '../../src/components/MetricCard.vue';
 
-assert.equal(typeof MetricCard, 'object');
-assert.ok(MetricCard);
+test('exposes the metric card component', () => {
+  expect(typeof MetricCard).toBe('object');
+  expect(MetricCard).toBeTruthy();
+});

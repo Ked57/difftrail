@@ -1,7 +1,9 @@
-import assert from 'node:assert';
+import { expect, test } from 'vitest';
 import SettingsPage from '../../src/pages/SettingsPage.vue';
 import { describeMode } from '../../src/utils/settings-mode.js';
 
-assert.equal(typeof SettingsPage, 'object');
-assert.ok(SettingsPage);
-assert.equal(typeof describeMode(true), 'string');
+test('opens settings with a described analysis mode', () => {
+  expect(typeof SettingsPage).toBe('object');
+  expect(SettingsPage).toBeTruthy();
+  expect(typeof describeMode(true)).toBe('string');
+});
