@@ -28,6 +28,15 @@ const appTests = [
   'apps/test-app/tests/unit/settings-mode.test.ts',
 ];
 
+/**
+ * @typedef {{
+ *   name: string;
+ *   edit: (cwd: string) => void;
+ *   files: readonly string[];
+ * }} Scenario
+ */
+
+/** @param {string} cwd @param {string[]} args @returns {string} */
 function runGit(cwd, args) {
   return execFileSync('git', ['-C', cwd, ...args], {
     encoding: 'utf8',
@@ -35,15 +44,18 @@ function runGit(cwd, args) {
   }).trim();
 }
 
+/** @param {string} cwd @param {string} message */
 function commit(cwd, message) {
   runGit(cwd, ['add', '--all']);
   runGit(cwd, ['commit', '--quiet', '-m', message]);
 }
 
+/** @param {string} cwd @param {string} path @param {string} content */
 function write(cwd, path, content) {
   writeFileSync(join(cwd, path), content);
 }
 
+/** @returns {string} */
 function copyWorkspace() {
   const cwd = join(temporary, 'fixture');
   execFileSync(
@@ -70,11 +82,13 @@ function copyWorkspace() {
   return cwd;
 }
 
+/** @param {string} cwd @param {string} path @param {string} from @param {string} to */
 function replace(cwd, path, from, to) {
   const target = join(cwd, path);
   write(cwd, path, readFileSync(target, 'utf8').replace(from, to));
 }
 
+/** @param {readonly string[]} files @returns {string[]} */
 function runnerArgs(files) {
   return [
     'run',
@@ -84,6 +98,7 @@ function runnerArgs(files) {
   ];
 }
 
+/** @param {string} cwd @returns {import('node:child_process').SpawnSyncReturns<string>} */
 function select(cwd) {
   return spawnSync(
     process.execPath,
@@ -105,6 +120,7 @@ function select(cwd) {
   );
 }
 
+/** @param {string} cwd @param {readonly string[]} files */
 function expectSelection(cwd, files) {
   const result = select(cwd);
   assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
@@ -121,6 +137,7 @@ function expectSelection(cwd, files) {
   if (files.length > 0) assert.equal(output.status, 0);
 }
 
+/** @type {readonly Scenario[]} */
 const scenarios = [
   {
     name: 'unit-source',
