@@ -122,13 +122,13 @@ function select(cwd) {
 }
 
 /** @param {string} cwd @param {readonly string[]} files */
-function expectSelection(cwd, files) {
+function expectSelection(cwd, files, name) {
   const result = select(cwd);
   assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
   const output = JSON.parse(result.stdout);
   assert.equal(output.command, 'vitest');
   assert.equal(output.cwd, 'apps/test-app');
-  assert.deepEqual(output.files, files);
+  assert.deepEqual(output.files, files, name);
   assert.deepEqual(output.args, runnerArgs(files));
   for (const testFile of appTests) {
     const selected = files.includes(testFile);
@@ -186,13 +186,24 @@ const scenarios = [
     files: [navigation, 'apps/test-app/tests/e2e/report-details.e2e.ts'],
   },
   {
-    name: 'unrelated',
+    name: 'shared-token',
     edit: (cwd) =>
       replace(
         cwd,
         'apps/test-app/src/styles/tokens.css',
         '--ink: #1b2838;',
         '--ink: #1a2736;',
+      ),
+    files: [navigation],
+  },
+  {
+    name: 'unrelated',
+    edit: (cwd) =>
+      replace(
+        cwd,
+        'apps/test-app/src/components/auto-alternate/AutoBadge.vue',
+        'background: #e3f3ed;',
+        'background: #e7f6f0;',
       ),
     files: [],
   },
@@ -248,12 +259,12 @@ try {
   for (const scenario of scenarios) {
     scenario.edit(cwd);
     commit(cwd, `${scenario.name} follow-up`);
-    expectSelection(cwd, scenario.files);
+    expectSelection(cwd, scenario.files, scenario.name);
     runGit(cwd, ['reset', '--hard', baseline]);
     runGit(cwd, ['clean', '-fd']);
   }
   process.stdout.write(
-    'Affected test runner acceptance passed (8 committed selections).\n',
+    'Affected test runner acceptance passed (9 committed selections).\n',
   );
 } finally {
   rmSync(temporary, { recursive: true, force: true });

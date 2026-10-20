@@ -9,7 +9,10 @@ import Components from 'unplugin-vue-components/vite';
 import VueRouter from 'unplugin-vue-router/vite';
 import { defineConfig } from 'vite';
 
+const root = fileURLToPath(new URL('.', import.meta.url));
+
 export default defineConfig({
+  root,
   plugins: [
     VueRouter({ routesFolder: 'src/routes' }),
     vue(),

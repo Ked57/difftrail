@@ -12,7 +12,7 @@ import {
 } from './workspaces.js';
 import { customIconEdges } from './icon-collections.js';
 import { routerAutoEdges } from './router-folders.js';
-import { iconSpecifier } from './virtual-modules.js';
+import { iconSpecifier, isRouterAuto } from './virtual-modules.js';
 
 interface ResolvedModule {
   readonly module: IModule;
@@ -76,7 +76,7 @@ function unresolvedVirtualEdges(
       ...router,
       ...virtualPackageEdges(snapshot, importer, specifier, resolution),
     ];
-  if (iconSpecifier(specifier))
+  if (iconSpecifier(specifier) || isRouterAuto(specifier))
     return virtualPackageEdges(snapshot, importer, specifier, resolution);
   throw gap(snapshot, importer, `cannot resolve ${specifier}`);
 }
@@ -142,13 +142,15 @@ async function dependencyEdges(
   tracked: ReadonlySet<string>,
   configuredSymlinks: readonly DependencyEdge[],
 ): Promise<DependencyEdge[]> {
-  if (dependency.couldNotResolve)
+  if (iconSpecifier(dependency.module) || isRouterAuto(dependency.module))
     return unresolvedVirtualEdges(
       snapshot,
       importer,
       dependency.module,
       resolution,
     );
+  if (dependency.couldNotResolve)
+    throw gap(snapshot, importer, `cannot resolve ${dependency.module}`);
   if (dependency.coreModule || dependency.dependencyTypes.includes('core'))
     return [];
   const external = externalEvidenceFor(
