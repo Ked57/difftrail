@@ -86,7 +86,11 @@ function copyWorkspace() {
 /** @param {string} cwd @param {string} path @param {string} from @param {string} to */
 function replace(cwd, path, from, to) {
   const target = join(cwd, path);
-  write(cwd, path, readFileSync(target, 'utf8').replace(from, to));
+  const source = readFileSync(target, 'utf8');
+  if (!source.includes(from)) {
+    throw new Error(`missing fixture text in ${path}`);
+  }
+  write(cwd, path, source.replace(from, to));
 }
 
 /** @param {readonly string[]} files @returns {string[]} */
@@ -221,8 +225,8 @@ const scenarios = [
       replace(
         cwd,
         'apps/react-app/src/components/unrelated/Note.tsx',
-        'background: #e3f3ed',
-        'background: #e7f6f0',
+        "background: '#e3f3ed'",
+        "background: '#e7f6f0'",
       ),
     files: [],
   },
