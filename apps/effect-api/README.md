@@ -16,6 +16,6 @@ Vitest runs the suite on Node:
 pnpm test
 ```
 
-`pnpm test:affected` asks the built Difftrail CLI for impacted `*.test.ts` and `*.e2e.ts` files and prints only those paths. When the selection is not empty it runs that Vitest subset. An empty selection does not start Vitest. Difftrail does not execute the server. End-to-end tests call `app.handle` and do not bind a port.
+`pnpm test:effect-history` from the repository root commits disposable Git histories and calls the built CLI directly, the same way as the Vue example history: a module edit from the repository root and from this directory with explicit base and head, a TypeScript path alias, deletion, rename, and invalid source. `pnpm test:affected` asks the built Difftrail CLI for impacted `*.test.ts` and `*.e2e.ts` files and prints only those paths. When the selection is not empty it runs that Vitest subset. An empty selection does not start Vitest. Difftrail does not execute the server. End-to-end tests call `app.handle` and do not bind a port.
 
 `pnpm smoke` imports the app with `bun --bun -e` when `bun` is on `PATH`, still without listening. It skips when Bun is absent.
