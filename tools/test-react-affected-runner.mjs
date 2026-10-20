@@ -221,8 +221,8 @@ const scenarios = [
       replace(
         cwd,
         'apps/react-app/src/components/unrelated/Note.tsx',
-        'background: #e3f3ed',
-        'background: #e7f6f0',
+        "background: '#e3f3ed'",
+        "background: '#e7f6f0'",
       ),
     files: [],
   },
