@@ -1,4 +1,4 @@
-import IExampleMark from '~icons/example/mark';
+import IExampleMark from '~icons/react/mark';
 import ILucideHouse from '~icons/lucide/house';
 import './MetricCard.css';
 

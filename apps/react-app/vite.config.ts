@@ -32,6 +32,7 @@ export default defineConfig({
       jsx: 'react',
       customCollections: {
         example: FileSystemIconLoader('./src/assets/icons'),
+        react: FileSystemIconLoader('./src/assets/icons'),
       },
     }),
   ],
