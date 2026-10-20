@@ -1,0 +1,22 @@
+{
+  "name": "@difftrail/effect-api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --config vitest.config.mjs",
+    "test:affected": "node scripts/affected-tests.mjs --execute -- --json --filter **/*.test.ts --filter **/*.e2e.ts",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@difftrail/example-shared": "workspace:*",
+    "effect": "4.0.5",
+    "elysia": "1.4.30"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.3",
+    "vitest": "4.1.11"
+  }
+}
