@@ -3,6 +3,8 @@ import { builtinModules } from 'node:module';
 import { resolve } from 'node:path';
 import type { Snapshot } from '@difftrail/git';
 import { withDependencyContext } from './external-errors.js';
+import { classifyCustomIcon } from './icon-collections.js';
+import { evidencePackageName, iconSpecifier } from './virtual-modules.js';
 
 export type ProviderRequests = Map<string, Map<string, Set<string>>>;
 
@@ -98,7 +100,7 @@ export async function providerRequests(
   const requests: ProviderRequests = new Map();
   for (const source of sources) {
     const names = (specifiersBySource.get(source) ?? [])
-      .map(packageName)
+      .map((specifier) => requestedPackage(snapshot, specifier))
       .filter((name): name is string => name !== undefined);
     if (!names.length) continue;
     const manifests = importerManifests(snapshot, source);
@@ -127,6 +129,20 @@ export async function providerRequests(
     }
   }
   return requests;
+}
+
+function requestedPackage(
+  snapshot: Snapshot,
+  specifier: string,
+): string | undefined {
+  const icon = iconSpecifier(specifier);
+  if (icon) {
+    const custom = classifyCustomIcon(snapshot, icon.collection, icon.name);
+    return custom.kind === 'unconfigured'
+      ? `@iconify-json/${icon.collection}`
+      : undefined;
+  }
+  return evidencePackageName(specifier) ?? packageName(specifier);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

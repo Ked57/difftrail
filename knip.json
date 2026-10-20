@@ -22,7 +22,9 @@
     "apps/test-app": {
       "entry": [
         "src/external/greeting-card.js",
+        "src/external/greeting-card.css",
         "src/components/auto-alternate/AutoBadge.vue",
+        "src/routes/*.vue",
         "tests/**/*.ts"
       ]
     }

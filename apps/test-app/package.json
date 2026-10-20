@@ -13,11 +13,20 @@
   },
   "dependencies": {
     "@difftrail/example-shared": "workspace:*",
-    "vue": "3.5.44"
+    "@tanstack/vue-router": "1.170.41",
+    "vee-validate": "4.15.1",
+    "vue": "3.5.44",
+    "vue-router": "4.6.4"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "1.2.147",
+    "@tailwindcss/vite": "4.3.3",
     "@vitejs/plugin-vue": "6.0.3",
+    "tailwindcss": "4.3.3",
+    "unplugin-auto-import": "21.1.0",
+    "unplugin-icons": "24.0.0",
     "unplugin-vue-components": "31.0.0",
+    "unplugin-vue-router": "0.19.2",
     "vite": "8.3.4",
     "vitest": "4.1.11",
     "vue-tsc": "^3.3.13"

@@ -10,6 +10,9 @@ import {
   workspaceConsumerManifest,
   workspaceForSpecifier,
 } from './workspaces.js';
+import { customIconEdges } from './icon-collections.js';
+import { routerAutoEdges } from './router-folders.js';
+import { iconSpecifier } from './virtual-modules.js';
 
 interface ResolvedModule {
   readonly module: IModule;
@@ -59,6 +62,50 @@ export async function resolvedEdges(
   return edges;
 }
 
+function unresolvedVirtualEdges(
+  snapshot: Snapshot,
+  importer: string,
+  specifier: string,
+  resolution: ResolvedEdgeEvidence,
+): DependencyEdge[] {
+  const custom = customIconEdges(snapshot, importer, specifier, 'import');
+  if (custom) return custom;
+  const router = routerAutoEdges(snapshot, importer, specifier);
+  if (router)
+    return [
+      ...router,
+      ...virtualPackageEdges(snapshot, importer, specifier, resolution),
+    ];
+  if (iconSpecifier(specifier))
+    return virtualPackageEdges(snapshot, importer, specifier, resolution);
+  throw gap(snapshot, importer, `cannot resolve ${specifier}`);
+}
+
+function virtualPackageEdges(
+  snapshot: Snapshot,
+  importer: string,
+  specifier: string,
+  resolution: ResolvedEdgeEvidence,
+): DependencyEdge[] {
+  const identity = externalEvidenceFor(
+    resolution.external,
+    importer,
+    specifier,
+  );
+  if (!identity)
+    throw gap(
+      snapshot,
+      importer,
+      `virtual module ${specifier} has no validated external package identity`,
+    );
+  return [identity.manifest, identity.lockfile].map((dependency) => ({
+    importer,
+    dependency,
+    specifier,
+    kind: 'metadata',
+  }));
+}
+
 function repositoryPath(snapshot: Snapshot, path: string): string {
   const local = relative(
     snapshot.directory,
@@ -96,7 +143,12 @@ async function dependencyEdges(
   configuredSymlinks: readonly DependencyEdge[],
 ): Promise<DependencyEdge[]> {
   if (dependency.couldNotResolve)
-    throw gap(snapshot, importer, `cannot resolve ${dependency.module}`);
+    return unresolvedVirtualEdges(
+      snapshot,
+      importer,
+      dependency.module,
+      resolution,
+    );
   if (dependency.coreModule || dependency.dependencyTypes.includes('core'))
     return [];
   const external = externalEvidenceFor(

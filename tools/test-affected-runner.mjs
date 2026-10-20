@@ -22,6 +22,7 @@ const baseline = execFileSync('git', ['rev-parse', 'HEAD'], {
 const temporary = mkdtempSync(join(tmpdir(), 'difftrail-affected-runner-'));
 const appTests = [
   'apps/test-app/tests/component/MetricCard.test.ts',
+  'apps/test-app/tests/e2e/navigation.e2e.ts',
   'apps/test-app/tests/e2e/report-details.e2e.ts',
   'apps/test-app/tests/e2e/settings-journey.e2e.ts',
   'apps/test-app/tests/unit/dashboard-summary.test.ts',
@@ -138,6 +139,7 @@ function expectSelection(cwd, files) {
 }
 
 /** @type {readonly Scenario[]} */
+const navigation = 'apps/test-app/tests/e2e/navigation.e2e.ts';
 const scenarios = [
   {
     name: 'unit-source',
@@ -145,10 +147,10 @@ const scenarios = [
       replace(
         cwd,
         'apps/test-app/src/utils/dashboard-summary.ts',
-        "files: '08'",
-        "files: '09'",
+        'two-digit count',
+        'two digit count',
       ),
-    files: ['apps/test-app/tests/unit/dashboard-summary.test.ts'],
+    files: [navigation, 'apps/test-app/tests/unit/dashboard-summary.test.ts'],
   },
   {
     name: 'component',
@@ -159,7 +161,18 @@ const scenarios = [
         'font-size: 1.8rem;',
         'font-size: 1.85rem;',
       ),
-    files: ['apps/test-app/tests/component/MetricCard.test.ts'],
+    files: ['apps/test-app/tests/component/MetricCard.test.ts', navigation],
+  },
+  {
+    name: 'custom-icon',
+    edit: (cwd) =>
+      replace(
+        cwd,
+        'apps/test-app/src/assets/icons/mark.svg',
+        'fill="#176447"',
+        'fill="#315fa7"',
+      ),
+    files: ['apps/test-app/tests/component/MetricCard.test.ts', navigation],
   },
   {
     name: 'e2e',
@@ -170,7 +183,7 @@ const scenarios = [
         'weekly report',
         'monthly report',
       ),
-    files: ['apps/test-app/tests/e2e/report-details.e2e.ts'],
+    files: [navigation, 'apps/test-app/tests/e2e/report-details.e2e.ts'],
   },
   {
     name: 'unrelated',
@@ -184,15 +197,42 @@ const scenarios = [
     files: [],
   },
   {
+    name: 'tailwind',
+    edit: (cwd) =>
+      replace(
+        cwd,
+        'apps/test-app/src/styles/tailwind.css',
+        "@import 'tailwindcss';",
+        "@import 'tailwindcss';\n",
+      ),
+    files: [],
+  },
+  {
     name: 'unit-and-e2e',
     edit: (cwd) =>
       replace(
         cwd,
         'apps/test-app/src/utils/settings-mode.ts',
-        'Detected analysis gaps stop the run.',
-        'Detected analysis gaps stop this run.',
+        'strict-analysis preference',
+        'strict analysis preference',
       ),
     files: [
+      navigation,
+      'apps/test-app/tests/e2e/settings-journey.e2e.ts',
+      'apps/test-app/tests/unit/settings-mode.test.ts',
+    ],
+  },
+  {
+    name: 'settings-form',
+    edit: (cwd) =>
+      replace(
+        cwd,
+        'apps/test-app/src/utils/settings-form.ts',
+        'before vee-validate submits it',
+        'before vee-validate stores it',
+      ),
+    files: [
+      navigation,
       'apps/test-app/tests/e2e/settings-journey.e2e.ts',
       'apps/test-app/tests/unit/settings-mode.test.ts',
     ],
@@ -213,7 +253,7 @@ try {
     runGit(cwd, ['clean', '-fd']);
   }
   process.stdout.write(
-    'Affected test runner acceptance passed (5 committed selections).\n',
+    'Affected test runner acceptance passed (8 committed selections).\n',
   );
 } finally {
   rmSync(temporary, { recursive: true, force: true });

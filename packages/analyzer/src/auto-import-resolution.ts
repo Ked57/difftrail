@@ -13,6 +13,7 @@ import {
   workspaceConsumerManifest,
   workspaceForSpecifier,
 } from './workspaces.js';
+import { customIconEdges } from './icon-collections.js';
 
 export async function resolveMappedDependencies(
   snapshot: Snapshot,
@@ -26,26 +27,14 @@ export async function resolveMappedDependencies(
   const workspaces = await prepareWorkspaces(snapshot);
   const workspaceEdges: DependencyEdge[] = [];
   const external: DependencyEdge[] = [];
-  for (const edge of unresolved) {
-    const workspace = workspaceForSpecifier(
-      workspaces.packages,
-      edge.dependency,
+  for (const edge of unresolved)
+    await appendMappedEdge(
+      snapshot,
+      edge,
+      workspaces,
+      workspaceEdges,
+      external,
     );
-    if (workspace)
-      workspaceEdges.push(
-        ...(await resolveWorkspaceMapping(
-          snapshot,
-          edge,
-          workspace,
-          workspaces,
-        )),
-      );
-    else {
-      const aliased = await resolveAliasMapping(snapshot, edge);
-      if (aliased) workspaceEdges.push(...aliased);
-      else external.push(edge);
-    }
-  }
   const resolvedEdges = edges.filter((edge) => !unresolved.includes(edge));
   resolvedEdges.push(...workspaceEdges);
   if (!external.length) return resolvedEdges;
@@ -88,6 +77,35 @@ export async function resolveMappedDependencies(
       error instanceof Error ? error.message : String(error),
     );
   }
+}
+
+async function appendMappedEdge(
+  snapshot: Snapshot,
+  edge: DependencyEdge,
+  workspaces: Awaited<ReturnType<typeof prepareWorkspaces>>,
+  workspaceEdges: DependencyEdge[],
+  external: DependencyEdge[],
+): Promise<void> {
+  const customIcon = customIconEdges(
+    snapshot,
+    edge.importer,
+    edge.dependency,
+    'auto-import',
+  );
+  if (customIcon) {
+    workspaceEdges.push(...customIcon);
+    return;
+  }
+  const workspace = workspaceForSpecifier(workspaces.packages, edge.dependency);
+  if (workspace) {
+    workspaceEdges.push(
+      ...(await resolveWorkspaceMapping(snapshot, edge, workspace, workspaces)),
+    );
+    return;
+  }
+  const aliased = await resolveAliasMapping(snapshot, edge);
+  if (aliased) workspaceEdges.push(...aliased);
+  else external.push(edge);
 }
 
 function externalSpecifiers(

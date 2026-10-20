@@ -20,6 +20,7 @@
     "verify:fast": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit",
     "verify:full": "pnpm verify:fast && pnpm test:integration && pnpm test:package && pnpm knip",
     "test:mutation:domain": "stryker run",
+    "test:mutation:app": "stryker run stryker.app.config.json",
     "test:package": "node tools/test-package.mjs"
   },
   "devDependencies": {

@@ -4,7 +4,11 @@ defineProps<{ label: string; value: string; detail: string }>();
 
 <template>
   <article class="metric-card">
-    <p>{{ label }}</p>
+    <p>
+      <IExampleMark class="metric-mark" />
+      <ILucideHouse class="metric-mark" />
+      {{ label }}
+    </p>
     <strong>{{ value }}</strong>
     <small>{{ detail }}</small>
   </article>
@@ -27,5 +31,11 @@ defineProps<{ label: string; value: string; detail: string }>();
 .metric-card strong {
   font-size: 1.8rem;
   letter-spacing: -0.04em;
+}
+.metric-mark {
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-right: 0.35rem;
+  vertical-align: baseline;
 }
 </style>
